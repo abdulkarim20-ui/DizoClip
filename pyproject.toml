@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dizoclip"
+version = "1.0.0"
+description = "A lightweight desktop manager for API keys, prompts, AI models, links, and commands."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6,<7",
+]
+
+[project.scripts]
+dizoclip = "main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
