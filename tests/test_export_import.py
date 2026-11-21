@@ -58,3 +58,34 @@ def test_export_skips_undecryptable_and_strips_private_fields():
         {"label": "locked", "full_key": "dpapi:xx", "_decrypt_failed": True},
     ])
     assert out == [{"label": "ok", "full_key": "k"}]
+
+
+def test_reimporting_same_file_is_completely_safe_and_idempotent(tmp_path):
+    """Verify that exporting data and importing the exact same file creates 0 duplicates and touches nothing."""
+    import sys
+    from PySide6.QtWidgets import QApplication
+    from app.core.data_manager import DataManager
+    from app.window.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    dm = DataManager(tmp_path)
+    win = MainWindow(dm)
+
+    win.keys.append({"label": "OriginalKey", "full_key": "sk-12345"})
+    win.prompts.append({"name": "TestPrompt", "prompt": "Hello world"})
+    win.save_keys()
+    win.save_prompts()
+
+    export_path = str(tmp_path / "test_backup.dizoclip")
+    win.export_data(export_path, "passphrase123")
+
+    # Re-import the exact same file
+    added = win.import_data(export_path, "passphrase123")
+
+    assert sum(added.values()) == 0
+    assert added == {"keys": 0, "prompts": 0, "ai_models": 0, "links": 0, "commands": 0}
+    assert len(win.keys) == 1
+    assert win.keys[0]["label"] == "OriginalKey"
+    assert len(win.prompts) == 1
+    assert win.prompts[0]["name"] == "TestPrompt"
+
