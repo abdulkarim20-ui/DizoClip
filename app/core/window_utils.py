@@ -5,7 +5,7 @@ Native OS window utilities (Windows dark mode title bar & Always-on-Top).
 import sys
 from PySide6.QtGui import QColor
 
-from app.config.theme import BG_MAIN, TEXT_MAIN
+from app.config.theme import BG_MAIN, TEXT_MAIN, WINDOW_BORDER
 
 
 def setup_app_user_model_id(app_id: str = "AbdulKarim.DizoClip.1.0") -> None:
@@ -18,7 +18,12 @@ def setup_app_user_model_id(app_id: str = "AbdulKarim.DizoClip.1.0") -> None:
             pass
 
 
-def apply_dark_title_bar(window, bg_hex: str = BG_MAIN, text_hex: str = TEXT_MAIN) -> None:
+def apply_dark_title_bar(
+    window,
+    bg_hex: str = BG_MAIN,
+    text_hex: str = TEXT_MAIN,
+    border_hex: str = WINDOW_BORDER,
+) -> None:
     """Set the native Windows 10/11 title bar and caption text colors directly."""
     if sys.platform != "win32":
         return
@@ -64,9 +69,11 @@ def apply_dark_title_bar(window, bg_hex: str = BG_MAIN, text_hex: str = TEXT_MAI
             hwnd, DWMWA_TEXT_COLOR, ctypes.byref(text_color), ctypes.sizeof(text_color)
         )
 
-        # Apply window border color matching the titlebar/background (subtle dark border)
+        # Apply slim window border color
+        qb = QColor(border_hex)
+        border_color = ctypes.c_int((qb.blue() << 16) | (qb.green() << 8) | qb.red())
         ctypes.windll.dwmapi.DwmSetWindowAttribute(
-            hwnd, DWMWA_BORDER_COLOR, ctypes.byref(caption_color), ctypes.sizeof(caption_color)
+            hwnd, DWMWA_BORDER_COLOR, ctypes.byref(border_color), ctypes.sizeof(border_color)
         )
 
         # Clear WS_POPUP from the window style so Windows 11 DWM recognizes it as a standard

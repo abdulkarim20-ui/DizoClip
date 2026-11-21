@@ -167,12 +167,13 @@ class MainWindow(QMainWindow):
 
         This is intentionally called before the first show().
         """
-        from app.config.theme import BG_MAIN, TEXT_MAIN
+        from app.config.theme import BG_MAIN, TEXT_MAIN, WINDOW_BORDER
 
         prepare_window_for_native_transition(
             self,
             BG_MAIN,
             TEXT_MAIN,
+            WINDOW_BORDER,
         )
 
     def paintEvent(self, event):

@@ -30,4 +30,5 @@ from app.config.theme import (
     SUCCESS,
     TEXT_DIM,
     TEXT_MAIN,
+    WINDOW_BORDER,
 )

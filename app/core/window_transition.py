@@ -100,10 +100,15 @@ class WindowTransitionManager:
         self.is_animating = False
 
 
-def prepare_window_for_native_transition(window, bg_hex: str = "#0b0d10", text_hex: str = "#f0f3f6") -> bool:
+def prepare_window_for_native_transition(
+    window,
+    bg_hex: str = "#0f111a",
+    text_hex: str = "#e2e8f0",
+    border_hex: str = "#2a2f3d",
+) -> bool:
     """Prepare native window appearance before show."""
     from app.core.window_utils import apply_dark_title_bar
-    apply_dark_title_bar(window, bg_hex, text_hex)
+    apply_dark_title_bar(window, bg_hex, text_hex, border_hex)
     window.setAttribute(Qt.WA_OpaquePaintEvent, True)
     window.setAttribute(Qt.WA_NoSystemBackground, True)
     window.setAutoFillBackground(True)

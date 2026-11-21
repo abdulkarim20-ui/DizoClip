@@ -13,6 +13,7 @@ TEXT_MAIN = "#e2e8f0"     # Softer white to reduce eye strain
 TEXT_DIM = "#7a8292"      # Subdued / masked text
 BORDER = "#2a2f3d"        # Cleaner structural lines
 CARD_BORDER = "#252b38"    # Card chip border
+WINDOW_BORDER = "#2a2f3d"  # Slim native window border
 BTN_HOVER = "#242938"      # Action button hover
 BTN_ACTIVE = "#2d3345"     # 3-dot active background
 DANGER = "#e84a4a"

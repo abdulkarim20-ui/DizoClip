@@ -120,3 +120,25 @@ def test_integrated_welcome_view():
     win.close()
 
 
+def test_window_border_configuration():
+    """Verify window border token exists and is passed to native title bar setup without error."""
+    import sys
+    from PySide6.QtWidgets import QApplication, QMainWindow
+    from app.config.theme import WINDOW_BORDER, BORDER
+    from app.core.window_utils import apply_dark_title_bar
+    from app.core.window_transition import prepare_window_for_native_transition
+
+    assert WINDOW_BORDER == BORDER
+    assert WINDOW_BORDER.startswith("#")
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    test_win = QMainWindow()
+    # Ensure apply_dark_title_bar accepts custom border_hex and executes cleanly
+    apply_dark_title_bar(test_win, border_hex=WINDOW_BORDER)
+    assert getattr(test_win, "_dark_titlebar_applied", False) is True
+
+    test_win2 = QMainWindow()
+    prepare_window_for_native_transition(test_win2, border_hex=WINDOW_BORDER)
+    assert getattr(test_win2, "_native_transition_prepared", False) is True
+
+
