@@ -272,7 +272,7 @@ class SettingsView(QWidget):
 
         card_enc, self.sw_enc = self._toggle_card(
             "Encrypt All Data",
-            "Also protect prompts, commands and snippets on disk",
+            "Protect prompts, commands and snippets",
             self.win.settings.get("encrypt_all_data", True),
             self._on_toggle_encrypt,
         )
