@@ -569,6 +569,7 @@ class MainWindow(QMainWindow):
         *,
         passphrase: str | None = None,
         plain: bool = False,
+        env: bool = False,
         include_secrets: bool = True,
     ) -> ExportStats:
         """Export only the chosen records. Raises ExportError / OSError; the UI reports them."""
@@ -577,6 +578,7 @@ class MainWindow(QMainWindow):
             selection,
             passphrase=passphrase,
             plain=plain,
+            env=env,
             include_secrets=include_secrets,
             app_version=__version__,
         )

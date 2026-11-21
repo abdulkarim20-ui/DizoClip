@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-11-21
 
 ### Added
+- **.env File Export & Import**: Export API keys directly into clean, standardized project `.env` files (`NAME=KEY`) with zero metadata, and import existing `.env` files directly into DizoClip with interactive preview.
 - **Selective Export & Import Preview**: Choose categories or single items to share via an interactive checklist dialog.
 - **Plain JSON Export**: Export unencrypted, cleanly formatted `.json` files (readable in VS Code) in addition to encrypted `.dizoclip`.
 - **API Key Secret Control**: Option to include or leave out API key secrets on export, with safety confirmation warnings for plain JSON.

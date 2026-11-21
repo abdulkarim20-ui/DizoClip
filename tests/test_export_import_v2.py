@@ -611,3 +611,91 @@ def test_export_dialog_warns_before_writing_secrets_as_plain_text(
     )  # user says No to the warning
     d._on_export()
     assert not out.exists()  # nothing was written
+
+
+# ------------------------------------------------------------------ .env plain text support
+def test_env_export_writes_clean_name_key_lines_without_metadata(tmp_path):
+    sel = {
+        "keys": [
+            {"label": "OPENAI_API_KEY", "full_key": "sk-openai-12345"},
+            {"label": "ANTHROPIC_KEY", "full_key": "sk-ant-67890"},
+        ]
+    }
+    path = tmp_path / ".env"
+    stats = ei.export_to_file(path, sel, env=True)
+    text = path.read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=sk-openai-12345" in text
+    assert "ANTHROPIC_KEY=sk-ant-67890" in text
+    assert "id" not in text and "createdAt" not in text and "magic" not in text
+    assert stats.total == 2
+
+
+def test_env_file_round_trips_without_passphrase(tmp_path):
+    sel = {
+        "keys": [
+            {"label": "GROQ_API_KEY", "full_key": "gsk-123"},
+            {"label": "GEMINI_API_KEY", "full_key": "AIzaSy-456"},
+        ]
+    }
+    path = tmp_path / ".env"
+    ei.export_to_file(path, sel, env=True)
+    blob = path.read_bytes()
+    assert ei.is_encrypted_bundle(blob) is False
+    incoming = ei.read_bundle(blob)
+    assert len(incoming["keys"]) == 2
+    labels = [k["label"] for k in incoming["keys"]]
+    keys = [k["full_key"] for k in incoming["keys"]]
+    assert "GROQ_API_KEY" in labels and "GEMINI_API_KEY" in labels
+    assert "gsk-123" in keys and "AIzaSy-456" in keys
+
+
+def test_env_file_parses_quotes_and_comments(tmp_path):
+    env_content = (
+        "# Development environment variables\n"
+        "export OPENAI_API_KEY=\"sk-proj-quoted 123\"\n"
+        "MY_SECRET='single-quoted-val'\n"
+        "PLAIN_KEY=sk-plain-val\n"
+        "\n"
+        "# Another comment\n"
+    )
+    path = tmp_path / "custom.env"
+    path.write_text(env_content, encoding="utf-8")
+    bundle = ei.read_bundle(path.read_bytes())
+    assert len(bundle["keys"]) == 3
+    by_label = {k["label"]: k["full_key"] for k in bundle["keys"]}
+    assert by_label["OPENAI_API_KEY"] == "sk-proj-quoted 123"
+    assert by_label["MY_SECRET"] == "single-quoted-val"
+    assert by_label["PLAIN_KEY"] == "sk-plain-val"
+
+
+def test_export_dialog_env_button_exports_clean_env_file(win, tmp_path, stub_ui):
+    from app.components.dialogs.export_dialog import ExportDialog
+
+    win.keys.append({"label": "COHERE_API_KEY", "full_key": "co-secret-999"})
+    d = ExportDialog(win)
+    d.show()
+    d.btn_env.setChecked(True)
+    assert d.is_env() is True
+    assert d.secrets_warn.isVisible() is True
+    out = tmp_path / ".env"
+    stub_ui["save"](str(out))
+    d._on_export()
+    text = out.read_text(encoding="utf-8")
+    assert "COHERE_API_KEY=co-secret-999" in text
+    assert "id" not in text and "color" not in text
+
+
+def test_import_env_file_through_plan_and_dialog(win, tmp_path):
+    from app.components.dialogs.import_dialog import ImportDialog
+
+    path = tmp_path / ".env"
+    path.write_text("NEW_PROVIDER_KEY=sk-provider-111\n", encoding="utf-8")
+    blob = path.read_bytes()
+    incoming = ei.read_bundle(blob)
+    plan = win.plan_import(incoming)
+    assert len(plan.items) == 1
+    assert plan.items[0].status == ei.NEW
+    d = ImportDialog(win, plan, ".env")
+    assert len(d.chosen_indexes()) == 1
+    win.import_selected(plan, {0})
+    assert any(k["label"] == "NEW_PROVIDER_KEY" for k in win.keys)

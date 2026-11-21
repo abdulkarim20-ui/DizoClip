@@ -608,7 +608,7 @@ class SettingsView(QWidget):
             self,
             "Import DizoClip data",
             "",
-            "DizoClip export (*.dizoclip *.json);;All files (*)",
+            "DizoClip files (*.dizoclip *.json *.env *.txt);;Environment files (*.env *.txt);;All files (*)",
         )
         if not path:
             return

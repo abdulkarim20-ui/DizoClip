@@ -292,6 +292,73 @@ def build_plain(payload: dict[str, list], stats: ExportStats, app_version: str =
     return (json.dumps(envelope, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def build_env_text(keys: list[dict]) -> str:
+    """Build clean KEY=VALUE environment file content without any metadata."""
+    lines = [
+        "# DizoClip API Keys Export",
+        f"# Exported on {datetime.date.today().isoformat()}",
+        "",
+    ]
+    for k in keys:
+        if not isinstance(k, dict):
+            continue
+        label = str(k.get("label", "")).strip()
+        secret = str(k.get("full_key", "")).strip()
+        if not label and not secret:
+            continue
+        var_name = "".join(c if c.isalnum() or c == "_" else "_" for c in label).strip("_")
+        var_name = var_name.upper() if var_name else "API_KEY"
+        if " " in secret or "\n" in secret or "#" in secret or '"' in secret or "'" in secret:
+            escaped = secret.replace('"', '\\"')
+            lines.append(f'{var_name}="{escaped}"')
+        else:
+            lines.append(f"{var_name}={secret}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def parse_env_text(text: str) -> list[dict]:
+    """Parse .env / text file into DizoClip key records."""
+    keys = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        var_name, val = line.split("=", 1)
+        var_name = var_name.strip()
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            val = val[1:-1]
+            val = val.replace('\\"', '"').replace("\\'", "'")
+        if var_name and val:
+            keys.append({
+                "label": var_name,
+                "full_key": val,
+                "color": "#e8794a",
+                "createdAt": int(time.time() * 1000),
+            })
+    return keys
+
+
+def is_env_bundle(blob: bytes) -> bool:
+    """True if blob appears to be an .env file rather than JSON or encrypted binary."""
+    try:
+        text = blob.decode("utf-8-sig").strip()
+        if not text or text.startswith("{") or text.startswith("["):
+            return False
+        lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+        if not lines:
+            return False
+        env_lines = sum(1 for l in lines if "=" in l and not l.startswith("="))
+        return env_lines > 0 and env_lines >= len(lines) * 0.7
+    except UnicodeDecodeError:
+        return False
+
+
 def write_bytes_atomic(path: str | Path, blob: bytes) -> None:
     """Write beside the target, fsync, then replace. A crash never leaves a half-written file."""
     path = Path(path)
@@ -313,13 +380,19 @@ def export_to_file(
     *,
     passphrase: str | None = None,
     plain: bool = False,
+    env: bool = False,
     include_secrets: bool = True,
     app_version: str = "",
 ) -> ExportStats:
     payload, stats = prepare_export(selection, include_secrets)
     if not payload:
         raise ExportError("Nothing selected to export.")
-    if plain:
+    if env:
+        keys = payload.get("keys", [])
+        if not keys:
+            raise ExportError("No API keys selected to export as an .env file.")
+        blob = build_env_text(keys).encode("utf-8")
+    elif plain:
         blob = build_plain(payload, stats, app_version)
     else:
         blob = build_bundle(payload, passphrase or "")  # raises ExportError if too short
@@ -344,6 +417,8 @@ def _parse_envelope(blob: bytes) -> dict:
 
 def is_encrypted_bundle(blob: bytes) -> bool:
     """True if a passphrase is needed. Raises ExportError if the file is not a DizoClip export."""
+    if is_env_bundle(blob):
+        return False
     env = _parse_envelope(blob)
     if env.get("kind") == "plain":
         if not isinstance(env.get("data"), dict):
@@ -356,6 +431,9 @@ def is_encrypted_bundle(blob: bytes) -> bool:
 
 def read_bundle(blob: bytes, passphrase: str | None = None) -> dict[str, Any]:
     """Return the {dataset: [records]} mapping from either file format."""
+    if is_env_bundle(blob):
+        keys = parse_env_text(blob.decode("utf-8-sig"))
+        return {"keys": keys}
     if is_encrypted_bundle(blob):
         if not passphrase:
             raise WrongPassphrase("This file needs a passphrase.")
