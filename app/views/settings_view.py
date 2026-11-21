@@ -335,7 +335,7 @@ class SettingsView(QWidget):
         row_vis.addWidget(self.visible_modules_selector, 0, Qt.AlignVCenter)
         lay_vis.addLayout(row_vis)
 
-        sub4 = QLabel("Choose which sections appear in the navigation bar")
+        sub4 = QLabel("Choose which sections appear in the nav bar")
         sub4.setStyleSheet(font_css("subtext", color="#7a8292"))
         sub4.setWordWrap(True)
         lay_vis.addWidget(sub4)
