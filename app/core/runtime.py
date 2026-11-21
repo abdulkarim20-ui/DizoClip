@@ -28,6 +28,7 @@ class RuntimeMode(str, Enum):
 
 APP_NAME = "DizoClip"
 PORTABLE_FLAG = "portable.flag"
+DATA_DIR_ENV = "DIZOCLIP_DATA_DIR"
 
 
 def app_dir() -> Path:
@@ -52,10 +53,15 @@ def user_data_dir() -> Path:
     """
     Return the durable per-user data directory.
 
-    Important:
-    - Never put installed user data under Program Files.
-    - Portable data stays beside the portable executable.
+    DIZOCLIP_DATA_DIR overrides everything (used by tests and benchmarks so they
+    can never touch real user data).
     """
+    override = os.environ.get(DATA_DIR_ENV)
+    if override:
+        path = Path(override).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     mode = runtime_mode()
 
     if mode in (RuntimeMode.DEVELOPMENT, RuntimeMode.PORTABLE):

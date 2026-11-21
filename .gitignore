@@ -1,71 +1,22 @@
-# ==============================
-# DizoClip User Data
-# ==============================
+# DizoClip user data. NEVER commit.
 User_Data/
-DC_*.json
+**/User_Data/
 *.json.tmp
 *.restore.tmp
 
-# ==============================
-# Python & Bytecode
-# ==============================
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.pyo
-
-# ==============================
-# Virtual Environments
-# ==============================
-venv/
 .venv/
-env/
-ENV/
-.env
-.env.*
-
-# ==============================
-# Testing & Coverage
-# ==============================
+venv/
 .pytest_cache/
-.coverage
-htmlcov/
-coverage.xml
 
-# ==============================
-# Build & Packaging Outputs
-# ==============================
+# Build output
 build/
 dist/
-Portable/
-Installed/
-Output/
-*.exe
 *.spec
-*.iss
-portable.flag
+setup_script.iss
 
-# ==============================
-# IDEs & Editors
-# ==============================
+# Editors
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
-
-# ==============================
-# Operating System
-# ==============================
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ==============================
-# Temporary & Log Files
-# ==============================
-*.tmp
-*.temp
-*.log
-*.bak
-*.swp
-*~
