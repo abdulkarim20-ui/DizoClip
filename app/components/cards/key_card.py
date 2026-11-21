@@ -8,31 +8,7 @@ from app.components.menus.action_menu import ActionMenuPopup
 from app.config.constants import BADGE_COLORS, KEY_CARD_H
 from app.config.theme import FONT_MONO, font_css
 from app.core.icons import render_pixmap
-
-
-def format_masked_key(key):
-    full_key = key.get("full_key", "")
-    masked = key.get("masked", "")
-    if full_key:
-        if len(full_key) >= 6:
-            prefix = full_key[:3]
-            suffix = full_key[-3:]
-            return f"{prefix}{'*' * 20}{suffix}"
-        return "*" * len(full_key)
-    elif masked:
-        # Extract existing prefix and suffix from stored masked string
-        clean = masked.replace("•", "").replace("*", "").replace("-", "").strip()
-        if len(clean) >= 6:
-            prefix = clean[:3]
-            suffix = clean[-3:]
-        elif len(clean) >= 3:
-            prefix = clean[:3]
-            suffix = clean[3:]
-        else:
-            prefix = clean
-            suffix = ""
-        return f"{prefix}{'*' * 20}{suffix}"
-    return ""
+from app.core.masking import mask_secret
 
 
 class KeyCard(BaseCard):
@@ -94,7 +70,12 @@ class KeyCard(BaseCard):
             key_ico_lbl.setStyleSheet("background: transparent; border: none;")
             bot_row.addWidget(key_ico_lbl, 0, Qt.AlignVCenter)
 
-        masked_text = format_masked_key(key)
+        if key.get("_decrypt_failed"):
+            masked_text = "Locked: encrypted for another Windows account"
+        elif key.get("full_key"):
+            masked_text = mask_secret(key["full_key"])
+        else:
+            masked_text = "No secret stored. Edit to re-enter it"
         self.masked_lbl = ElidedLabel(masked_text)
         self.masked_lbl.setStyleSheet(f"""
             color: #7a8292;

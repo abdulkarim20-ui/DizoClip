@@ -767,6 +767,7 @@ class AIModelFormView(QWidget):
             self.editing["color"] = self.selected_color
             self.editing["snippets"] = snippets_dict
             self.editing["updatedAt"] = now_ms
+            self.editing.pop("_decrypt_failed", None)
         else:
             new_id = f"model_{now_ms}_{uuid.uuid4().hex[:5]}"
             self.win.ai_models.insert(0, {

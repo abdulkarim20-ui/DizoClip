@@ -1,6 +1,7 @@
 """DizoClip application package."""
+__version__ = "1.1.0"
 
-__all__ = ["MainWindow"]
+__all__ = ["MainWindow", "__version__"]
 
 
 def __getattr__(name):

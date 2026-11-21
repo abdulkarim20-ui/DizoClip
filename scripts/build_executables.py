@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+from app import __version__ as APP_VERSION  # noqa: E402
 DIST_DIR = ROOT_DIR / "dist"
 BUILD_DIR = ROOT_DIR / "build"
 SETUP_ROOT = Path("X:/Playground/setup") if Path("X:/Playground/setup").is_dir() else ROOT_DIR.parent / "setup"
@@ -103,7 +105,7 @@ def setup_portable_package(built_exe: Path) -> Path:
         "- Local Data Storage: All your settings, API keys (DPAPI-protected),\n"
         "  prompts, AI models, links, and commands are stored inside the\n"
         "  adjacent 'User_Data' folder.\n"
-        "- USB / External Drive Ready: Carry your personal developer workspace anywhere.\n\n"
+        "- Your API keys are tied to your Windows account and will not open on a different PC.\n\n"
         "To Run:\n"
         "Double-click 'DizoClip-Portable.exe'.\n",
         encoding="utf-8",
@@ -130,8 +132,7 @@ def setup_installed_package(built_exe: Path) -> Path:
         "Features:\n"
         "- Standard Windows Application: Stores all durable user data inside\n"
         "  %APPDATA%\\DizoClip\\User_Data, keeping application files clean.\n"
-        "- Windows Integration: Windows Startup launch option, Taskbar pinning,\n"
-        "  and global hotkeys (Ctrl+Alt+Space).\n\n"
+        "- Windows Integration: Taskbar pinning and clean native desktop integration.\n\n"
         "Files:\n"
         "- DizoClip-Setup.exe : Run this to install DizoClip with Desktop and Start Menu shortcuts.\n"
         "- DizoClip.exe       : Standalone installed executable (runs directly using %APPDATA%).\n",
@@ -172,7 +173,7 @@ def create_inno_script(exe_path: Path) -> str:
     """Generate Inno Setup script content."""
     return f"""
 #define MyAppName "DizoClip"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "{APP_VERSION}"
 #define MyAppPublisher "AbdulKarim"
 #define MyAppURL "https://github.com/abdulkarim20-ui"
 #define MyAppExeName "DizoClip.exe"

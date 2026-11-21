@@ -1,22 +1,36 @@
 import os
 import sys
 
+from PySide6.QtCore import QLockFile
 from PySide6.QtGui import QColor, QIcon, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.config.paths import ASSETS_DIR
 from app.config.theme import ACCENT, APP_QSS, BG_CARD, BG_INPUT, BG_MAIN, TEXT_DIM, TEXT_MAIN
+from app.core.data_manager import DataManager
 from app.core.fonts import load_app_fonts
+from app.core.logging_setup import setup_logging
+from app.core.recovery import load_with_recovery
+from app.core.runtime import user_data_dir
 from app.core.window_transition import show_prepared_window
 from app.core.window_utils import setup_app_user_model_id
 from app.window.main_window import MainWindow
 
 
 def main():
+    setup_logging()
+
     # Setup Windows taskbar grouping so custom icon appears
     setup_app_user_model_id("AbdulKarim.DizoClip.1.0")
 
     app = QApplication(sys.argv)
+
+    lock = QLockFile(str(user_data_dir() / "dizoclip.lock"))
+    lock.setStaleLockTime(0)  # a crashed run never blocks the next start
+    if not lock.tryLock(100):
+        QMessageBox.information(None, "DizoClip", "DizoClip is already running.")
+        sys.exit(0)
+
     load_app_fonts()
     app.setStyle("Fusion")
     app.setApplicationName("DizoClip")
@@ -49,7 +63,11 @@ def main():
     # Global stylesheet
     app.setStyleSheet(APP_QSS)
 
-    win = MainWindow()
+    dm = DataManager()
+    datasets = load_with_recovery(dm)
+    if datasets is None:
+        sys.exit(1)
+    win = MainWindow(data_manager=dm, datasets=datasets)
 
     # Show prepared window with smooth 200ms fade-in
     show_prepared_window(win, duration=200)

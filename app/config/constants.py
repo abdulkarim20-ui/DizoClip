@@ -16,6 +16,7 @@ WINDOW_H_PROMPT_FORM = 425
 WINDOW_H_AI_MODEL_FORM = 455
 
 CARD_W = 326
+CLIPBOARD_CLEAR_SECONDS = 30
 CARD_BORDER = "#252b38"
 KEY_CARD_H = 76
 PROMPT_CARD_H = 82
@@ -31,6 +32,8 @@ BADGE_COLORS = [
 DEFAULT_SETTINGS = {
     "always_on_top": False,
     "confirm_delete": True,
+    "auto_clear_clipboard": True,
+    "encrypt_all_data": True,
     "startup_module": "key-round",
     "section_order": ["key-round", "prompt", "ai_model", "link", "command"],
     "enabled_sections": ["key-round", "prompt", "ai_model", "link", "command"],

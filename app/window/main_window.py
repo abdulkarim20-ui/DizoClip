@@ -1,5 +1,7 @@
+import logging
 import os
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -13,11 +15,13 @@ from PySide6.QtWidgets import (
     QDialog,
     QGraphicsOpacityEffect,
     QMainWindow,
+    QMessageBox,
     QStackedWidget,
 )
 
 from app.components.dialogs.confirm_delete import ConfirmDeleteDialog
 from app.config.constants import (
+    CLIPBOARD_CLEAR_SECONDS,
     WINDOW_H_AI_MODEL_FORM,
     WINDOW_H_EMPTY,
     WINDOW_H_KEYS_3,
@@ -27,9 +31,18 @@ from app.config.constants import (
 )
 from app.config.paths import ASSETS_DIR
 from app.config.theme import BG_MAIN, TEXT_MAIN
-from app.core.clipboard import copy_to_clipboard
+from app.core.clipboard import ClipboardGuard, copy_to_clipboard
+from app.core.export_import import (
+    EXPORT_DATASETS,
+    build_bundle,
+    clean_for_export,
+    clean_incoming,
+    merge_into,
+    open_bundle,
+)
 from app.core.icons import IconManager
 from app.core.data_manager import DataError, DataManager
+from app.core.masking import looks_masked
 from app.core.window_utils import apply_dark_title_bar, toggle_always_on_top
 from app.core.window_transition import prepare_window_for_native_transition
 from app.sections.ai_models.form import AIModelFormView
@@ -40,6 +53,8 @@ from app.sections.prompts.form import PromptFormView
 from app.views.list_view import ListView
 from app.views.settings_view import SettingsView
 from app.views.welcome_view import WelcomeView
+
+log = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -52,27 +67,17 @@ class MainWindow(QMainWindow):
     WINDOW_H_PROMPT_FORM = WINDOW_H_PROMPT_FORM
     WINDOW_H_AI_MODEL_FORM = WINDOW_H_AI_MODEL_FORM
 
-    def __init__(self):
+    def __init__(self, data_manager=None, datasets=None):
         super().__init__()
         self.setWindowTitle("DizoClip")
         self.setFixedSize(self.WINDOW_W, self.WINDOW_H_KEYS_3)
 
         self._resize_anim = None
 
-        self.data_manager = DataManager()
-        try:
-            datasets = self.data_manager.load_all()
-        except DataError as exc:
-            from PySide6.QtWidgets import QMessageBox
-
-            QMessageBox.critical(
-                self,
-                "DizoClip Data Recovery",
-                f"DizoClip could not safely read your data.\n\n"
-                f"{exc}\n\n"
-                f"Your existing files were not replaced."
-            )
-            raise
+        # main.py normally loads data through load_with_recovery() and passes it in.
+        self.data_manager = data_manager or DataManager()
+        if datasets is None:
+            datasets = self.data_manager.load_all()  # raises DataError if unreadable
 
         self.settings = datasets["settings"]
         self.keys = datasets["keys"]
@@ -110,6 +115,7 @@ class MainWindow(QMainWindow):
         self.setPalette(pal)
 
         self.icons = IconManager()
+        self.clipboard_guard = ClipboardGuard(self)
 
         self.stack = QStackedWidget()
         self.stack.setAutoFillBackground(True)
@@ -184,27 +190,28 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
 
     def closeEvent(self, event: QCloseEvent):
-        """Handle window close with fade-out animation."""
-        event.ignore()  # Don't close immediately
+        """Fade out, then quit. Refuses to lose settings silently."""
+        event.ignore()  # we close ourselves after the animation
 
-        # Save settings
-        if hasattr(self, 'save_settings'):
-            try:
-                self.save_settings()
-            except Exception:
-                pass
+        self.clipboard_guard.flush()  # never leave a copied key behind
 
-        # Animate close then quit
+        if not self.save_settings():
+            reply = QMessageBox.question(
+                self,
+                "DizoClip",
+                "Your settings could not be saved (see the message above).\n\nQuit anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+
         def on_close_finished():
             from PySide6.QtWidgets import QApplication
             QApplication.quit()
 
         from app.core.window_transition import hide_window_with_animation
-        hide_window_with_animation(
-            self,
-            duration=200,
-            on_finished=on_close_finished
-        )
+        hide_window_with_animation(self, duration=200, on_finished=on_close_finished)
 
     def animate_to_height(self, target_h):
         current_size = self.size()
@@ -379,29 +386,67 @@ class MainWindow(QMainWindow):
         ):
             self.show_list_view()
 
+    def reload_data(self) -> bool:
+        """Re-read every dataset from disk (used after restoring a backup or importing)."""
+        try:
+            datasets = self.data_manager.load_all()
+        except DataError as exc:
+            QMessageBox.critical(self, "DizoClip", f"Could not reload your data:\n\n{exc}")
+            return False
+        self.settings = datasets["settings"]
+        self.keys = datasets["keys"]
+        self.prompts = datasets["prompts"]
+        self.ai_models = datasets["ai_models"]
+        self.links = datasets["links"]
+        self.commands = datasets["commands"]
+        self.custom_colors = datasets["custom_colors"]
+        self.list_view.refresh_nav_tabs()
+        self.settings_view.refresh_nav_tabs()
+        self.show_list_view()
+        return True
+
+    def _persist(self, name: str, data) -> bool:
+        """Save one dataset. Never fails silently: log it and tell the user."""
+        try:
+            self.data_manager.save(name, data)
+            return True
+        except DataError as exc:
+            log.exception("Saving %s failed", name)
+            QMessageBox.critical(
+                self,
+                "DizoClip: could not save",
+                f"Your latest changes to {name.replace('_', ' ')} were NOT saved.\n\n{exc}",
+            )
+            return False
+
     def save_keys(self):
-        self.data_manager.save("keys", self.keys)
+        return self._persist("keys", self.keys)
 
     def save_prompts(self):
-        self.data_manager.save("prompts", self.prompts)
+        return self._persist("prompts", self.prompts)
 
     def save_ai_models(self):
-        self.data_manager.save("ai_models", self.ai_models)
+        return self._persist("ai_models", self.ai_models)
 
     def save_links(self):
-        self.data_manager.save("links", self.links)
+        return self._persist("links", self.links)
 
     def save_commands(self):
-        self.data_manager.save("commands", self.commands)
+        return self._persist("commands", self.commands)
 
     def save_settings(self):
-        self.data_manager.save("settings", self.settings)
+        return self._persist("settings", self.settings)
 
-    def copy_key(self, key, btn=None):
-        val_to_copy = key.get("full_key", key["masked"])
-        QGuiApplication.clipboard().setText(val_to_copy)
-        if btn is None:
-            return
+    # ------------------------------------------------------------------ copy
+    def _copy_text(self, text: str, btn=None, sensitive: bool = False) -> None:
+        if sensitive and self.settings.get("auto_clear_clipboard", True):
+            self.clipboard_guard.copy_sensitive(text, CLIPBOARD_CLEAR_SECONDS)
+        else:
+            QGuiApplication.clipboard().setText(text)
+        if btn is not None:
+            self._flash_copied(btn)
+
+    def _flash_copied(self, btn) -> None:
         check = self.icons.get("check")
         if check is not None:
             btn.setText("")
@@ -409,71 +454,6 @@ class MainWindow(QMainWindow):
         else:
             btn.setText("✓")
         QTimer.singleShot(1200, lambda: self._restore_copy_btn(btn))
-
-    def copy_prompt(self, prompt, btn=None):
-        val_to_copy = prompt.get("prompt") or prompt.get("content", "")
-        QGuiApplication.clipboard().setText(val_to_copy)
-        if btn is None:
-            return
-        check = self.icons.get("check")
-        if check is not None:
-            btn.setText("")
-            btn.setIcon(check)
-        else:
-            btn.setText("✓")
-        QTimer.singleShot(1200, lambda: self._restore_copy_btn(btn))
-
-    def copy_ai_model(self, text_or_model, btn=None):
-        if isinstance(text_or_model, dict):
-            snippets = text_or_model.get("snippets", {})
-            val_to_copy = next(iter(snippets.values())) if snippets else ""
-        else:
-            val_to_copy = str(text_or_model)
-        QGuiApplication.clipboard().setText(val_to_copy)
-        if btn is None:
-            return
-        check = self.icons.get("check")
-        if check is not None:
-            btn.setText("")
-            btn.setIcon(check)
-        else:
-            btn.setText("✓")
-        QTimer.singleShot(1200, lambda: self._restore_copy_btn(btn))
-
-    def copy_link(self, link, btn=None):
-        val = link.get("url", "")
-        QGuiApplication.clipboard().setText(val)
-        if btn is None:
-            return
-        check = self.icons.get("check")
-        if check is not None:
-            btn.setText("")
-            btn.setIcon(check)
-        else:
-            btn.setText("✓")
-        QTimer.singleShot(1200, lambda: self._restore_copy_btn(btn))
-
-    def copy_command(self, cmd_item, btn=None):
-        val = cmd_item.get("command", "")
-        QGuiApplication.clipboard().setText(val)
-        if btn is None:
-            return
-        check = self.icons.get("check")
-        if check is not None:
-            btn.setText("")
-            btn.setIcon(check)
-        else:
-            btn.setText("✓")
-        QTimer.singleShot(1200, lambda: self._restore_copy_btn(btn))
-
-    def open_link(self, link):
-        url = link.get("url", "").strip()
-        if url:
-            from PySide6.QtGui import QDesktopServices
-            from PySide6.QtCore import QUrl
-            if not url.startswith(("http://", "https://")):
-                url = "https://" + url
-            QDesktopServices.openUrl(QUrl(url))
 
     def _restore_copy_btn(self, btn):
         try:
@@ -488,89 +468,119 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             pass
 
-    def confirm_delete_key(self, key):
-        if not self.settings.get("confirm_delete", True):
-            if key in self.keys:
-                self.keys.remove(key)
-                self.save_keys()
-                self.show_list_view()
+    def _is_locked(self, item) -> bool:
+        """Items encrypted for another Windows account cannot be copied here."""
+        if isinstance(item, dict) and item.get("_decrypt_failed"):
+            QMessageBox.warning(
+                self,
+                "DizoClip",
+                "This item is encrypted for a different Windows account, so it can't be copied here.\n\n"
+                "Open Edit and enter it again to replace it.",
+            )
+            return True
+        return False
+
+    def copy_key(self, key, btn=None):
+        if self._is_locked(key):
             return
-        dlg = ConfirmDeleteDialog(self, key.get("label", "Key"), self.icons.get("trash_danger"))
-        center = self.frameGeometry().center()
-        dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
-        if dlg.exec() == QDialog.Accepted:
-            if key in self.keys:
-                self.keys.remove(key)
-                self.save_keys()
-                self.show_list_view()
+        secret = key.get("full_key", "")
+        if not secret or looks_masked(secret):
+            QMessageBox.warning(
+                self,
+                "DizoClip",
+                "This key has no usable secret stored, so nothing was copied.\n\n"
+                "Open Edit and enter the key again.",
+            )
+            return
+        self._copy_text(secret, btn, sensitive=True)
+
+    def copy_prompt(self, prompt, btn=None):
+        if self._is_locked(prompt):
+            return
+        self._copy_text(prompt.get("prompt") or prompt.get("content", ""), btn)
+
+    def copy_ai_model(self, text_or_model, btn=None):
+        if self._is_locked(text_or_model):
+            return
+        if isinstance(text_or_model, dict):
+            snippets = text_or_model.get("snippets", {})
+            text = next(iter(snippets.values())) if snippets else ""
+        else:
+            text = str(text_or_model)
+        self._copy_text(text, btn)
+
+    def copy_link(self, link, btn=None):
+        self._copy_text(link.get("url", ""), btn)
+
+    def copy_command(self, cmd_item, btn=None):
+        if self._is_locked(cmd_item):
+            return
+        self._copy_text(cmd_item.get("command", ""), btn)
+
+    def open_link(self, link):
+        url = link.get("url", "").strip()
+        if url:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            if not url.startswith(("http://", "https://")):
+                url = "https://" + url
+            QDesktopServices.openUrl(QUrl(url))
+
+    # ---------------------------------------------------------------- delete
+    def _confirm_delete(self, items: list, item, label: str, save) -> None:
+        if self.settings.get("confirm_delete", True):
+            dlg = ConfirmDeleteDialog(self, label, self.icons.get("trash_danger"))
+            center = self.frameGeometry().center()
+            dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
+            if dlg.exec() != QDialog.Accepted:
+                return
+        if item in items:
+            items.remove(item)
+            save()
+            self.show_list_view()
+
+    def confirm_delete_key(self, key):
+        self._confirm_delete(self.keys, key, key.get("label", "Key"), self.save_keys)
 
     def confirm_delete_prompt(self, prompt):
-        if not self.settings.get("confirm_delete", True):
-            if prompt in self.prompts:
-                self.prompts.remove(prompt)
-                self.save_prompts()
-                self.show_list_view()
-            return
         label = prompt.get("name") or prompt.get("title", "Prompt")
-        dlg = ConfirmDeleteDialog(self, label, self.icons.get("trash_danger"))
-        center = self.frameGeometry().center()
-        dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
-        if dlg.exec() == QDialog.Accepted:
-            if prompt in self.prompts:
-                self.prompts.remove(prompt)
-                self.save_prompts()
-                self.show_list_view()
+        self._confirm_delete(self.prompts, prompt, label, self.save_prompts)
 
     def confirm_delete_ai_model(self, model):
-        if not self.settings.get("confirm_delete", True):
-            if model in self.ai_models:
-                self.ai_models.remove(model)
-                self.save_ai_models()
-                self.show_list_view()
-            return
-        label = model.get("name", "AI Model")
-        dlg = ConfirmDeleteDialog(self, label, self.icons.get("trash_danger"))
-        center = self.frameGeometry().center()
-        dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
-        if dlg.exec() == QDialog.Accepted:
-            if model in self.ai_models:
-                self.ai_models.remove(model)
-                self.save_ai_models()
-                self.show_list_view()
+        self._confirm_delete(self.ai_models, model, model.get("name", "AI Model"), self.save_ai_models)
 
     def confirm_delete_link(self, link):
-        if not self.settings.get("confirm_delete", True):
-            if link in self.links:
-                self.links.remove(link)
-                self.save_links()
-                self.show_list_view()
-            return
-        label = link.get("title", "Link")
-        dlg = ConfirmDeleteDialog(self, label, self.icons.get("trash_danger"))
-        center = self.frameGeometry().center()
-        dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
-        if dlg.exec() == QDialog.Accepted:
-            if link in self.links:
-                self.links.remove(link)
-                self.save_links()
-                self.show_list_view()
+        self._confirm_delete(self.links, link, link.get("title", "Link"), self.save_links)
 
     def confirm_delete_command(self, cmd_item):
-        if not self.settings.get("confirm_delete", True):
-            if cmd_item in self.commands:
-                self.commands.remove(cmd_item)
-                self.save_commands()
-                self.show_list_view()
-            return
-        label = cmd_item.get("title", "Command")
-        dlg = ConfirmDeleteDialog(self, label, self.icons.get("trash_danger"))
-        center = self.frameGeometry().center()
-        dlg.move(center.x() - dlg.width() // 2, center.y() - dlg.height() // 2)
-        if dlg.exec() == QDialog.Accepted:
-            if cmd_item in self.commands:
-                self.commands.remove(cmd_item)
-                self.save_commands()
-                self.show_list_view()
+        self._confirm_delete(self.commands, cmd_item, cmd_item.get("title", "Command"), self.save_commands)
+
+    def export_data(self, path: str, passphrase: str) -> None:
+        payload = {name: clean_for_export(name, getattr(self, name)) for name in EXPORT_DATASETS}
+        Path(path).write_bytes(build_bundle(payload, passphrase))
+
+    def import_data(self, path: str, passphrase: str) -> dict:
+        """Merge an export into the current data. Returns {dataset: number_added}."""
+        payload = open_bundle(Path(path).read_bytes(), passphrase)  # raises ExportError
+        added = {}
+        for name in EXPORT_DATASETS:
+            incoming = clean_incoming(name, payload.get(name))
+            added[name] = merge_into(getattr(self, name), incoming)
+        # save() backs up each file first, so an import can be undone from Restore.
+        self.data_manager.save_all({name: getattr(self, name) for name in EXPORT_DATASETS})
+        self.show_list_view()
+        return added
+
+    def rewrite_all_datasets(self) -> None:
+        """Re-save prompts, commands and AI models (used when the encryption setting changes)."""
+        try:
+            self.data_manager.save_all(
+                {"prompts": self.prompts, "commands": self.commands, "ai_models": self.ai_models},
+                force=True,
+            )
+        except DataError as exc:
+            log.exception("Rewriting data after encryption change failed")
+            QMessageBox.critical(self, "DizoClip", f"Could not update your data files:\n\n{exc}")
 
     def apply_always_on_top(self, enable: bool):
         toggle_always_on_top(self, enable)

@@ -164,6 +164,7 @@ class PromptFormView(QWidget):
             self.editing["prompt"] = body
             self.editing["color"] = self.selected_color
             self.editing["updatedAt"] = now_ms
+            self.editing.pop("_decrypt_failed", None)
         else:
             new_id = f"prompt_{now_ms}_{uuid.uuid4().hex[:5]}"
             self.win.prompts.insert(0, {

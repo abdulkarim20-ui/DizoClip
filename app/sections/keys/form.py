@@ -14,6 +14,7 @@ from app.components.buttons.icon_button import icon_button
 from app.components.inputs.color_picker import ColorSelectorBar
 from app.config.constants import BADGE_COLORS
 from app.config.theme import ACCENT, BG_CARD, BORDER, BTN_HOVER, TEXT_DIM, TEXT_MAIN, font_css
+from app.core.masking import looks_masked
 
 
 class FormView(QWidget):
@@ -140,10 +141,21 @@ class FormView(QWidget):
         self.editing_key = key_data
         self._set_reveal(False)
         self.title_lbl.setText("Edit API Key" if key_data else "Add API Key")
+        self.hint.hide()
         if key_data is not None:
             self.name_edit.setText(key_data.get("label", ""))
-            initial_val = key_data.get("full_key", key_data.get("masked", ""))
-            self.key_edit.setText(initial_val)
+            secret = ""
+            if key_data.get("_decrypt_failed"):
+                self._show_hint(
+                    "This key can't be decrypted on this Windows account. "
+                    "Enter it again to replace it."
+                )
+            else:
+                secret = key_data.get("full_key", "")
+                if not secret or looks_masked(secret):
+                    secret = ""
+                    self._show_hint("The secret for this key is missing. Enter it again to repair the entry.")
+            self.key_edit.setText(secret)
             self.key_edit.setCursorPosition(0)
             self.name_edit.setCursorPosition(0)
             self._pick_color(key_data.get("color", BADGE_COLORS[0]))
@@ -151,8 +163,11 @@ class FormView(QWidget):
             self.name_edit.clear()
             self.key_edit.clear()
             self._pick_color(BADGE_COLORS[0])
-        self.hint.hide()
         self.name_edit.setFocus()
+
+    def _show_hint(self, text: str):
+        self.hint.setText(text)
+        self.hint.show()
 
     def _pick_color(self, c):
         self.selected_color = c
@@ -175,31 +190,26 @@ class FormView(QWidget):
             self.eye_action.setIcon(ic)
         self.eye_action.setToolTip("Hide key" if flag else "Reveal key")
 
-    def _mask_key(self, raw):
-        if len(raw) <= 6:
-            return "*" * len(raw) if raw else "********"
-        prefix = raw[:3]
-        suffix = raw[-3:]
-        return f"{prefix}-{'*' * 20}{suffix}"
-
     def _save(self):
         name = self.name_edit.text().strip()
         val = self.key_edit.text().strip()
         if not name or not val:
-            self.hint.setText("Please fill in both fields.")
-            self.hint.show()
+            self._show_hint("Please fill in both fields.")
+            return
+        if looks_masked(val):
+            self._show_hint("That looks like a masked placeholder, not a real key.")
             return
         if self.editing_key is not None:
             self.editing_key["label"] = name
             self.editing_key["full_key"] = val
-            self.editing_key["masked"] = self._mask_key(val)
             self.editing_key["color"] = self.selected_color
+            self.editing_key.pop("masked", None)
+            self.editing_key.pop("_decrypt_failed", None)
         else:
             self.win.keys.insert(0, {
                 "label": name,
-                "masked": self._mask_key(val),
                 "full_key": val,
-                "color": self.selected_color
+                "color": self.selected_color,
             })
         self.win.save_keys()
         self.win.show_list_view()

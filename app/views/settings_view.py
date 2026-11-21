@@ -1,9 +1,16 @@
+import datetime
+
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, QUrl
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPainter
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QToolButton,
@@ -11,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app import __version__
 from app.components.buttons.nav_tab import NavTabButton
 from app.components.navigation.module_selector import (
     StartupModuleSelector,
@@ -18,7 +26,9 @@ from app.components.navigation.module_selector import (
 )
 from app.components.labels.animated_tooltip import attach_tooltip, set_tooltip
 from app.config.sections import SECTION_DEFINITIONS
-from app.config.theme import ACCENT, FONT_MONO, TEXT_DIM, TEXT_MAIN, font_css
+from app.config.theme import ACCENT, CARD_BORDER, FONT_MONO, TEXT_DIM, TEXT_MAIN, font_css
+from app.core.data_manager import DataError
+from app.core.export_import import ExportError
 from app.core.icons import render_pixmap
 from app.sections.registry import SECTION_REGISTRY
 
@@ -245,6 +255,22 @@ class SettingsView(QWidget):
         lay_del.addWidget(sub2)
         body_lay.addWidget(card_del)
 
+        card_clip, self.sw_clip = self._toggle_card(
+            "Auto-Clear Clipboard",
+            "Clear copied API keys after 30 seconds",
+            self.win.settings.get("auto_clear_clipboard", True),
+            self._on_toggle_clip,
+        )
+        body_lay.addWidget(card_clip)
+
+        card_enc, self.sw_enc = self._toggle_card(
+            "Encrypt All Data",
+            "Also protect prompts, commands and snippets on disk",
+            self.win.settings.get("encrypt_all_data", True),
+            self._on_toggle_encrypt,
+        )
+        body_lay.addWidget(card_enc)
+
         # 2. Section: Modules
         sec_mod = QLabel("Modules")
         sec_mod.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
@@ -402,7 +428,24 @@ class SettingsView(QWidget):
 
         body_lay.addWidget(card_interaction)
 
-        # 4. Section: About
+        # 4. Section: Data
+        sec_data = QLabel("Data")
+        sec_data.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
+        body_lay.addWidget(sec_data)
+        body_lay.addWidget(self._action_card(
+            "Restore from Backup", "Roll a data file back to an earlier backup",
+            "Restore", self._on_restore_clicked))
+        body_lay.addWidget(self._action_card(
+            "Data Folder", "Open the folder where DizoClip stores your data",
+            "Open", self._on_open_folder_clicked))
+        body_lay.addWidget(self._action_card(
+            "Export Data", "Save everything to a passphrase-protected file",
+            "Export", self._on_export_clicked))
+        body_lay.addWidget(self._action_card(
+            "Import Data", "Add items from an export file (nothing is deleted)",
+            "Import", self._on_import_clicked))
+
+        # 5. Section: About
         sec_about = QLabel("About")
         sec_about.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
         body_lay.addWidget(sec_about)
@@ -430,7 +473,7 @@ class SettingsView(QWidget):
         lbl_app_name.setStyleSheet(font_css("title", color="#ffffff"))
         top_name_row.addWidget(lbl_app_name)
 
-        lbl_version = QLabel("1.0.0")
+        lbl_version = QLabel(__version__)
         lbl_version.setStyleSheet(
             f"color: {ACCENT}; font-weight: 700; font-family: {FONT_MONO}; "
             f"font-size: 11.5px; letter-spacing: 0.5px; background: transparent; border: none;"
@@ -459,6 +502,126 @@ class SettingsView(QWidget):
 
         scroll.setWidget(body)
         root.addWidget(scroll, 1)
+
+    def _action_card(self, title: str, subtitle: str, button_text: str, on_click) -> QFrame:
+        """Settings card with a title, a one-line subtitle and a small button on the right."""
+        card = QFrame()
+        card.setObjectName("Card")
+        card.setFixedHeight(66)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(14, 9, 14, 9)
+        lay.setSpacing(4)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        lbl = QLabel(title)
+        lbl.setStyleSheet(font_css("body-strong", color="#ffffff"))
+        row.addWidget(lbl, 0, Qt.AlignVCenter)
+        row.addStretch(1)
+
+        btn = QPushButton(button_text)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFixedHeight(26)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #161821; border: 1px solid {CARD_BORDER}; border-radius: 6px;
+                color: #ffffff; font-size: 11.5px; font-weight: 600; padding: 0 12px;
+            }}
+            QPushButton:hover {{ background: #1a1e2a; border-color: #3b4354; }}
+        """)
+        btn.clicked.connect(on_click)
+        row.addWidget(btn, 0, Qt.AlignVCenter)
+        lay.addLayout(row)
+
+        sub = QLabel(subtitle)
+        sub.setStyleSheet(font_css("subtext", color="#7a8292"))
+        sub.setWordWrap(True)
+        lay.addWidget(sub)
+        return card
+
+    def _toggle_card(self, title: str, subtitle: str, checked: bool, on_toggle):
+        """Settings card with a ToggleSwitch. Returns (card, switch)."""
+        card = QFrame()
+        card.setObjectName("Card")
+        card.setFixedHeight(66)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(14, 9, 14, 9)
+        lay.setSpacing(4)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        lbl = QLabel(title)
+        lbl.setStyleSheet(font_css("body-strong", color="#ffffff"))
+        row.addWidget(lbl, 0, Qt.AlignVCenter)
+        row.addStretch(1)
+        switch = ToggleSwitch(checked=checked, on_toggle=on_toggle)
+        row.addWidget(switch, 0, Qt.AlignVCenter)
+        lay.addLayout(row)
+
+        sub = QLabel(subtitle)
+        sub.setStyleSheet(font_css("subtext", color="#7a8292"))
+        sub.setWordWrap(True)
+        lay.addWidget(sub)
+        return card, switch
+
+    def _on_toggle_clip(self, checked):
+        self.win.settings["auto_clear_clipboard"] = checked
+        self.win.save_settings()
+
+    def _on_toggle_encrypt(self, checked):
+        self.win.settings["encrypt_all_data"] = checked
+        self.win.save_settings()       # DataManager learns the new value here
+        self.win.rewrite_all_datasets()
+
+    def _on_restore_clicked(self):
+        from app.components.dialogs.restore_backup import RestoreBackupDialog
+        RestoreBackupDialog(self.win).exec()
+
+    def _on_open_folder_clicked(self):
+        try:
+            self.win.data_manager.open_data_folder()
+        except (DataError, OSError) as exc:
+            QMessageBox.information(self, "DizoClip", str(exc))
+
+    def _ask_passphrase(self, title: str, label: str):
+        text, ok = QInputDialog.getText(self, title, label, QLineEdit.Password)
+        return text if ok and text else None
+
+    def _on_export_clicked(self):
+        pw = self._ask_passphrase("Export data", "Choose a passphrase (8+ characters).\n"
+                                  "Anyone with the file AND the passphrase can read your keys:")
+        if not pw:
+            return
+        if pw != self._ask_passphrase("Export data", "Type the passphrase again:"):
+            QMessageBox.warning(self, "DizoClip", "The passphrases did not match.")
+            return
+        default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.dizoclip"
+        path, _ = QFileDialog.getSaveFileName(self, "Export DizoClip data", default, "DizoClip export (*.dizoclip)")
+        if not path:
+            return
+        try:
+            self.win.export_data(path, pw)
+        except (ExportError, OSError) as exc:
+            QMessageBox.critical(self, "DizoClip", f"Export failed:\n\n{exc}")
+            return
+        QMessageBox.information(self, "DizoClip", "Export saved. Keep the file and the passphrase safe.")
+
+    def _on_import_clicked(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import DizoClip data", "", "DizoClip export (*.dizoclip)")
+        if not path:
+            return
+        pw = self._ask_passphrase("Import data", "Passphrase for this file:")
+        if not pw:
+            return
+        try:
+            added = self.win.import_data(path, pw)
+        except (ExportError, OSError) as exc:
+            QMessageBox.critical(self, "DizoClip", f"Import failed:\n\n{exc}")
+            return
+        total = sum(added.values())
+        QMessageBox.information(self, "DizoClip", f"Imported {total} new item(s). Existing items were not changed.")
 
     def refresh_nav_tabs(self):
         """Rebuilds navigation tab buttons according to section_order and enabled_sections."""

@@ -375,6 +375,9 @@ class AIModelCard(BaseCard):
         self.copy_btn.setToolTip(f"Copy {lang} snippet")
 
     def _handle_copy(self):
+        if self.model.get("_decrypt_failed"):
+            self.on_copy(self.model, self.copy_btn)
+            return
         snippets = self.model.get("snippets", {})
         val = snippets.get(self.selected_lang, "")
         self.on_copy(val, self.copy_btn)

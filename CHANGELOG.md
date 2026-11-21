@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-11-21
+
+### Added
+- **Clipboard Auto-Clear**: Automatically wipes copied API keys after 30 seconds if still on the clipboard. Marks clipboard mime data to request exclusion from Windows Clipboard History (`Win+V`) and cloud syncing.
+- **Passphrase-Protected Export & Import**: Export all your data into an encrypted `.dizoclip` bundle using Scrypt and Fernet (AES-128). Safely migrate data to a new PC or Windows account.
+- **Encrypt All Data Setting**: Protect prompts, terminal commands, and AI model snippets on disk using DPAPI encryption (`dzc1:` prefix). Default enabled in Settings.
+- **File Logging**: Standardized rotating diagnostic logs in `User_Data/Logs/dizoclip.log` with automatic secret redaction.
+- **Single-Instance Protection**: Enforced using `QLockFile` so concurrent app instances cannot corrupt data files.
+
+### Changed
+- Surface save failures: disk write errors are shown in a prompt dialog rather than failing silently.
+- Refactored `ListView.rebuild()` to be registry-driven and modular.
+- Unified copy and delete handling across the main window.
+
+---
+
+## [1.0.1] - 2026-11-21
+
+### Security
+- API-key records no longer store a partially readable `masked` copy of the secret on disk. Existing files and old backups are migrated and scrubbed automatically.
+- Editing or copying a key whose secret is missing can no longer copy or save the mask as if it were the key.
+- Keys that cannot be decrypted (e.g. from another Windows account) are preserved untouched rather than overwritten.
+
+### Fixed
+- Backups are now kept per data file (newest 10 plus one per day for 14 days). Saving settings or reordering cards can no longer push key backups out. Unchanged saves no longer create backups.
+- A corrupt data file no longer crashes the app on start-up. A recovery dialog offers to restore the latest backup.
+- Tests no longer read or write real `User_Data/`.
+
+### Added
+- Settings → Data: Restore from Backup, Open Data Folder.
+
+### Changed
+- Documentation corrected to match actual behaviour.
+
+---
+
 ## [1.0.0] - 2026-01-15
 
 ### ✨ Initial Release
@@ -31,9 +67,8 @@ DizoClip launches as a lightweight, privacy-first developer clipboard manager fo
 
 - **💻 AI Models & Code Snippets**
   - Multi-language code reference (Python, Node.js, Shell, LangChain)
-  - Pre-built API client initialization snippets
   - Language-aware copying
-  - Syntax highlighting
+  - Clean monospace code display
   - Color-coded categorization
   - Full-text search across models and snippets
 
@@ -243,13 +278,11 @@ If you encounter issues:
 
 2. **Secrets not decrypting?**
    - Only available from original Windows user account
-   - Cannot be transferred between machines
-   - Check Windows Hello/password status
+   - Use Export / Import to transfer between machines or accounts
 
-3. **Search not working?**
-   - Rebuild search index in Settings
+3. **Data issues?**
+   - Restore from backup in Settings → Data
    - Check JSON file format manually
-   - Restore from backup if corrupted
 
 ---
 
@@ -279,7 +312,7 @@ The lightweight, privacy-first clipboard manager for developers is now available
 
 **Key Highlights:**
 - Five specialized modules for different data types
-- Military-grade Windows DPAPI encryption
+- Windows DPAPI encryption
 - 100% offline, no tracking, completely private
 - Beautiful dark theme optimized for developers
 - Atomic writes with automatic backups

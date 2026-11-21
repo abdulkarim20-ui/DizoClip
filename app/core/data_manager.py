@@ -1,24 +1,26 @@
 """
 Central DizoClip data service.
 
-This is the integration point for all existing MainWindow save/load calls.
-It preserves the existing public in-memory shapes:
+Public in-memory shapes are unchanged:
     keys, prompts, ai_models, links, commands, settings, custom_colors
 
-Important safety behavior:
-- Never converts a corrupt JSON file into an empty dataset.
-- Creates a backup before replacing an existing dataset.
-- Writes atomically.
-- Migrates legacy filenames.
-- Adds schema metadata to settings without changing existing module data shapes.
-- Encrypts API key ``full_key`` values on disk on Windows via DPAPI.
+Safety rules:
+- A corrupt JSON file is never turned into an empty dataset (DataError, with .dataset set).
+- The current file is backed up (per dataset) before it is replaced.
+- Writes are atomic (temp file + fsync + replace).
+- Saves that change nothing are skipped (no rewrite, no backup).
+- Legacy filenames are migrated without deleting the originals.
+- API key `full_key` values are encrypted on disk with Windows DPAPI.
+- The old plaintext `masked` fragment is removed from key records (one-time migration).
+- Prompts, commands, and AI snippets can be protected on disk with Windows DPAPI (dzc1:).
 """
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import logging
 import os
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -30,13 +32,26 @@ from app.config.constants import (
     DEFAULT_SEED_PROMPTS,
     DEFAULT_SETTINGS,
 )
-from app.core.backup_manager import BackupManager
+from app.core.backup_manager import BackupEntry, BackupError, BackupManager
 from app.core.runtime import user_data_dir
-from app.core.security import protect_key_record, unprotect_key_record
+from app.core.security import (
+    SecretProtectionError,
+    map_text,
+    protect_key_record,
+    protect_text,
+    unprotect_key_record,
+    unprotect_text,
+)
+
+log = logging.getLogger(__name__)
 
 
 class DataError(RuntimeError):
-    pass
+    """Data could not be read or written safely. `dataset` names the failing dataset."""
+
+    def __init__(self, message: str, dataset: str | None = None):
+        super().__init__(message)
+        self.dataset = dataset
 
 
 SCHEMA_VERSION = 2
@@ -50,14 +65,41 @@ DATASET_SPECS = {
     "settings": ("DC_Settings.json", "settings.json", DEFAULT_SETTINGS, dict),
     "custom_colors": ("DC_Custom_Colors.json", "custom_colors.json", [], list),
 }
+_STEM_TO_NAME = {Path(spec[0]).stem: name for name, spec in DATASET_SPECS.items()}
+
+ENCRYPTED_FIELDS = {
+    "prompts": ("prompt", "content"),
+    "commands": ("command",),
+    "ai_models": ("snippets",),
+}
+
+
+def _key_needs_migration(item: Any) -> bool:
+    """True for key records that still carry `masked` or hold a plaintext secret."""
+    if not isinstance(item, dict):
+        return False
+    if "masked" in item:
+        return True
+    secret = item.get("full_key")
+    return isinstance(secret, str) and bool(secret) and not secret.startswith(("dpapi:", "plain:"))
 
 
 class DataManager:
-    def __init__(self, data_dir: Path | None = None, backup_count: int = 5):
+    def __init__(
+        self,
+        data_dir: Path | None = None,
+        backup_count: int = 10,
+        backup_min_interval: float = 30.0,
+    ):
         self.data_dir = Path(data_dir or user_data_dir())
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.backups = BackupManager(self.data_dir, max_backups=backup_count)
+        self.backups = BackupManager(
+            self.data_dir, keep_recent=backup_count, min_interval=backup_min_interval
+        )
+        self._fingerprints: dict[str, str] = {}
+        self.encrypt_all = True  # mirrors settings["encrypt_all_data"]
 
+    # ------------------------------------------------------------ helpers
     def path_for(self, name: str) -> Path:
         try:
             filename = DATASET_SPECS[name][0]
@@ -74,14 +116,17 @@ class DataManager:
     def _expected_type(self, name: str):
         return DATASET_SPECS[name][3]
 
+    @staticmethod
+    def _fingerprint(data: Any) -> str:
+        blob = json.dumps(data, sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
     def _read_json(self, path: Path) -> Any:
         try:
             with path.open("r", encoding="utf-8") as fh:
                 return json.load(fh)
         except json.JSONDecodeError as exc:
-            raise DataError(
-                f"Data file is corrupted or incomplete: {path.name}"
-            ) from exc
+            raise DataError(f"Data file is corrupted or incomplete: {path.name}") from exc
         except OSError as exc:
             raise DataError(f"Could not read {path}: {exc}") from exc
 
@@ -117,11 +162,52 @@ class DataManager:
             return None
 
         data = self._validate(name, self._read_json(legacy))
-        # Copy, do not delete legacy. This is intentionally non-destructive.
+        # Copy, do not delete the legacy file. This is intentionally non-destructive.
         self._write_atomic(target, data)
         return data
 
+    def _protect_records(self, name: str, items: list) -> list:
+        fields = ENCRYPTED_FIELDS[name]
+        out = []
+        for rec in items:
+            if not isinstance(rec, dict):
+                out.append(rec)
+                continue
+            clean = {k: v for k, v in rec.items() if not k.startswith("_")}
+            if not rec.get("_decrypt_failed"):  # undecryptable records are written back untouched
+                for field in fields:
+                    if field in clean:
+                        clean[field] = map_text(clean[field], protect_text)
+            out.append(clean)
+        return out
+
+    def _unprotect_records(self, name: str, items: list) -> list:
+        fields = ENCRYPTED_FIELDS[name]
+        out = []
+        for rec in items:
+            if not isinstance(rec, dict):
+                out.append(rec)
+                continue
+            rec = dict(rec)
+            for field in fields:
+                if field in rec:
+                    try:
+                        rec[field] = map_text(rec[field], unprotect_text)
+                    except SecretProtectionError:
+                        rec["_decrypt_failed"] = True  # keep the encrypted values as they are
+            out.append(rec)
+        return out
+
+    # ------------------------------------------------------------ loading
     def _load(self, name: str) -> Any:
+        try:
+            return self._load_inner(name)
+        except DataError as exc:
+            if exc.dataset is None:
+                exc.dataset = name
+            raise
+
+    def _load_inner(self, name: str) -> Any:
         target = self.path_for(name)
         migrated = self._migrate_legacy(name)
         if migrated is not None:
@@ -134,10 +220,39 @@ class DataManager:
 
         if name == "settings":
             data = self._normalize_settings(data)
+            self.encrypt_all = bool(data.get("encrypt_all_data", True))
+        elif name in ENCRYPTED_FIELDS:
+            data = self._unprotect_records(name, data)
         elif name == "keys":
-            data = [unprotect_key_record(item) if isinstance(item, dict) else item for item in data]
+            needs_migration = any(_key_needs_migration(i) for i in data)
+            data = [unprotect_key_record(i) if isinstance(i, dict) else i for i in data]
+            if needs_migration:
+                self._migrate_keys_file(data)
 
+        self._fingerprints[name] = self._fingerprint(data)
         return data
+
+    def _migrate_keys_file(self, data: list) -> None:
+        """One-time upgrade: drop plaintext `masked` fragments and encrypt legacy plaintext keys."""
+        try:
+            self.save("keys", data, force=True)  # snapshots the old file, writes the clean one
+            self._scrub_key_backups()            # old snapshots still hold the same fragments
+            log.info("Migrated DC_Keys.json: removed masked fragments, secrets protected")
+        except DataError:
+            log.warning("Key migration failed; it will be retried on next launch", exc_info=True)
+
+    def _scrub_key_backups(self) -> None:
+        folder = self.backups.backup_dir / self.path_for("keys").stem
+        for snap in folder.glob("*.json"):
+            try:
+                raw = json.loads(snap.read_text(encoding="utf-8"))
+                if not isinstance(raw, list):
+                    continue
+                cleaned = [protect_key_record(i) if isinstance(i, dict) else i for i in raw]
+                if cleaned != raw:
+                    self._write_atomic(snap, cleaned)
+            except Exception:
+                log.warning("Could not scrub backup %s", snap.name, exc_info=True)
 
     def _normalize_settings(self, data: dict) -> dict:
         cfg = copy.deepcopy(DEFAULT_SETTINGS)
@@ -163,25 +278,34 @@ class DataManager:
         cfg.setdefault("schema_version", SCHEMA_VERSION)
         cfg.setdefault("welcome_seen", False)
         cfg.setdefault("backup_on_save", True)
+        cfg.setdefault("auto_clear_clipboard", True)
+        cfg.setdefault("encrypt_all_data", True)
         cfg["schema_version"] = SCHEMA_VERSION
         return cfg
 
     def load_all(self) -> dict[str, Any]:
         return {name: self._load(name) for name in DATASET_SPECS}
 
-    def save(self, name: str, data: Any) -> None:
+    # ------------------------------------------------------------- saving
+    def save(self, name: str, data: Any, *, force: bool = False) -> None:
+        """
+        Save one dataset.
+        force=True skips the "nothing changed" shortcut and always takes a backup.
+        """
         self._validate(name, data)
-
+        fingerprint = self._fingerprint(data)
         path = self.path_for(name)
 
-        # Backup the exact current dataset before replacing it.
+        if not force and path.exists() and self._fingerprints.get(name) == fingerprint:
+            return  # nothing changed: no rewrite, no backup
+
         if path.exists():
             try:
-                self.backups.create_snapshot([path])
-            except Exception as exc:
-                # Saving must not silently proceed when backup is requested.
-                # The caller can surface the error and retry.
-                raise DataError(f"Backup failed; {name} was not changed.") from exc
+                self.backups.snapshot_file(path, force=force)
+            except BackupError as exc:
+                raise DataError(
+                    f"Backup failed; {path.name} was not changed. ({exc})", dataset=name
+                ) from exc
 
         payload = copy.deepcopy(data)
 
@@ -193,10 +317,20 @@ class DataManager:
 
         if name == "settings":
             payload = self._normalize_settings(payload)
+            self.encrypt_all = bool(payload.get("encrypt_all_data", True))
+        elif name in ENCRYPTED_FIELDS and self.encrypt_all:
+            payload = self._protect_records(name, payload)
+        elif name in ENCRYPTED_FIELDS:
+            # encryption off: still never write in-memory-only fields to disk
+            payload = [
+                {k: v for k, v in rec.items() if not k.startswith("_")} if isinstance(rec, dict) else rec
+                for rec in payload
+            ]
 
         self._write_atomic(path, payload)
+        self._fingerprints[name] = fingerprint
 
-    def save_all(self, datasets: dict[str, Any]) -> None:
+    def save_all(self, datasets: dict[str, Any], force: bool = False) -> None:
         # Validate everything before touching disk.
         for name, data in datasets.items():
             if name in DATASET_SPECS:
@@ -204,16 +338,34 @@ class DataManager:
 
         for name, data in datasets.items():
             if name in DATASET_SPECS:
-                self.save(name, data)
+                self.save(name, data, force=force)
+
+    # ------------------------------------------------------------ backups
+    def backups_for(self, name: str) -> list[BackupEntry]:
+        """Backups for one dataset name ('keys', 'links', ...), newest first."""
+        return self.backups.list_backups(self.path_for(name).stem)
+
+    def create_backup(self) -> list[Path]:
+        """Snapshot every data file right now (ignores the debounce)."""
+        made = []
+        for name in DATASET_SPECS:
+            path = self.path_for(name)
+            if path.exists():
+                snap = self.backups.snapshot_file(path, force=True)
+                if snap:
+                    made.append(snap)
+        return made
+
+    def restore_backup(self, entry: BackupEntry) -> Path:
+        """Restore one backup. Validates its shape first; backs up (or quarantines) the current file."""
+        name = _STEM_TO_NAME.get(entry.dataset)
+        if name is None:
+            raise BackupError(f"Unknown dataset: {entry.dataset}")
+        target = self.backups.restore(entry, validate=lambda raw: self._validate(name, raw))
+        self._fingerprints.clear()
+        return target
 
     def open_data_folder(self) -> None:
         if os.name != "nt":
             raise DataError("Open data folder is currently implemented for Windows.")
         os.startfile(str(self.data_dir))  # type: ignore[attr-defined]
-
-    def create_backup(self) -> Path:
-        return self.backups.create_snapshot()
-
-    def latest_backup(self) -> Path | None:
-        snapshots = self.backups.list_snapshots()
-        return snapshots[0] if snapshots else None

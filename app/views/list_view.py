@@ -602,7 +602,6 @@ class ListView(QWidget):
         if self.card_drag is not None:
             self.card_drag.cancel()
             self.card_drag = None
-
         self.expanded_card = None
 
         # Block paint while tearing down old cards so nothing paints mid-deletion
@@ -616,146 +615,38 @@ class ListView(QWidget):
                 w.deleteLater()
         self.body.setUpdatesEnabled(True)
 
+        meta = SECTION_REGISTRY.get(self.active_tab, SECTION_REGISTRY["key-round"])
         text = self.search.text().strip().lower()
+        all_items = getattr(self.win, meta["items_attr"])
+        items = [i for i in all_items if meta["match"](i, text)] if text else all_items
+        is_prompt = meta["is_prompt"]
 
-        if self.active_tab == "key-round":
-            items = ([k for k in self.win.keys if text in k["label"].lower()]
-                     if text else self.win.keys)
-            self.count.setText(str(len(self.win.keys)))
-            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff)
+        self.count.setText(str(len(all_items)))
+        self.scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff
+        )
 
-            if not items:
-                self.cards.addStretch(1)
-                self.cards.addWidget(self._empty_widget(searching=bool(text)))
-                self.cards.addStretch(1)
-                self.win.update_size_for_count(0, is_prompt=False, animate=animate_resize)
-                return
+        if not items:
+            self.cards.addStretch(1)
+            self.cards.addWidget(self._empty_widget(searching=bool(text)))
+            self.cards.addStretch(1)
+            self.win.update_size_for_count(0, is_prompt=is_prompt, animate=animate_resize)
+            return
 
-            self.win.update_size_for_count(len(items), is_prompt=False, animate=animate_resize)
-            for k in items:
-                card = KeyCard(
-                    k, self.win,
-                    on_copy=self.win.copy_key,
-                    on_edit=self.win.show_edit_view,
-                    on_delete=self.win.confirm_delete_key,
-                    on_toggle=self.toggle_card,
-                )
-                self._add_reorderable_card(card, self.win.keys, self.win.save_keys)
-            if len(items) < 3:
-                self.cards.addStretch(1)
-
-        elif self.active_tab == "prompt":
-            items = ([p for p in self.win.prompts if (text in (p.get("name") or p.get("title", "")).lower() or text in (p.get("prompt") or p.get("content", "")).lower())]
-                     if text else self.win.prompts)
-            self.count.setText(str(len(self.win.prompts)))
-            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff)
-
-            if not items:
-                self.cards.addStretch(1)
-                self.cards.addWidget(self._empty_widget(searching=bool(text)))
-                self.cards.addStretch(1)
-                self.win.update_size_for_count(0, is_prompt=True, animate=animate_resize)
-                return
-
-            self.win.update_size_for_count(len(items), is_prompt=True, animate=animate_resize)
-            for p in items:
-                card = PromptCard(
-                    p, self.win,
-                    on_copy=self.win.copy_prompt,
-                    on_edit=self.win.show_edit_prompt_view,
-                    on_delete=self.win.confirm_delete_prompt,
-                    on_toggle=self.toggle_card,
-                )
-                self._add_reorderable_card(card, self.win.prompts, self.win.save_prompts)
-            if len(items) < 3:
-                self.cards.addStretch(1)
-
-        elif self.active_tab in ("ai_model", "sparkles-2"):
-            def match_model(m):
-                if not text:
-                    return True
-                if text in m.get("name", "").lower():
-                    return True
-                if text in m.get("provider", "").lower():
-                    return True
-                for s_code in m.get("snippets", {}).values():
-                    if text in s_code.lower():
-                        return True
-                return False
-
-            items = [m for m in self.win.ai_models if match_model(m)]
-            self.count.setText(str(len(self.win.ai_models)))
-            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff)
-
-            if not items:
-                self.cards.addStretch(1)
-                self.cards.addWidget(self._empty_widget(searching=bool(text)))
-                self.cards.addStretch(1)
-                self.win.update_size_for_count(0, is_prompt=True, animate=animate_resize)
-                return
-
-            self.win.update_size_for_count(len(items), is_prompt=True, animate=animate_resize)
-            for m in items:
-                card = AIModelCard(
-                    m, self.win,
-                    on_copy=self.win.copy_ai_model,
-                    on_edit=self.win.show_edit_ai_model_view,
-                    on_delete=self.win.confirm_delete_ai_model,
-                )
-                self._add_reorderable_card(card, self.win.ai_models, self.win.save_ai_models)
-            if len(items) < 3:
-                self.cards.addStretch(1)
-
-        elif self.active_tab == "link":
-            items = ([l for l in self.win.links if (text in l.get("title", "").lower() or text in l.get("url", "").lower())]
-                     if text else self.win.links)
-            self.count.setText(str(len(self.win.links)))
-            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff)
-
-            if not items:
-                self.cards.addStretch(1)
-                self.cards.addWidget(self._empty_widget(searching=bool(text)))
-                self.cards.addStretch(1)
-                self.win.update_size_for_count(0, is_prompt=False, animate=animate_resize)
-                return
-
-            self.win.update_size_for_count(len(items), is_prompt=False, animate=animate_resize)
-            for l in items:
-                card = LinkCard(
-                    l, self.win,
-                    on_copy=self.win.copy_link,
-                    on_edit=self.win.show_edit_link_view,
-                    on_delete=self.win.confirm_delete_link,
-                    on_open=self.win.open_link,
-                )
-                self._add_reorderable_card(card, self.win.links, self.win.save_links)
-            if len(items) < 3:
-                self.cards.addStretch(1)
-
-        else:  # "command"
-            items = ([c for c in self.win.commands if (text in c.get("title", "").lower() or text in c.get("command", "").lower())]
-                     if text else self.win.commands)
-            self.count.setText(str(len(self.win.commands)))
-            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff)
-
-            if not items:
-                self.cards.addStretch(1)
-                self.cards.addWidget(self._empty_widget(searching=bool(text)))
-                self.cards.addStretch(1)
-                self.win.update_size_for_count(0, is_prompt=True, animate=animate_resize)
-                return
-
-            self.win.update_size_for_count(len(items), is_prompt=True, animate=animate_resize)
-            for c in items:
-                card = CommandCard(
-                    c, self.win,
-                    on_copy=self.win.copy_command,
-                    on_edit=self.win.show_edit_command_view,
-                    on_delete=self.win.confirm_delete_command,
-                )
-                self._add_reorderable_card(card, self.win.commands, self.win.save_commands)
-            if len(items) < 3:
-                self.cards.addStretch(1)
+        self.win.update_size_for_count(len(items), is_prompt=is_prompt, animate=animate_resize)
+        save = getattr(self.win, meta["save_attr"])
+        extra = meta.get("card_kwargs", lambda win: {})(self.win)
+        for item in items:
+            card = meta["card_class"](
+                item, self.win,
+                on_copy=getattr(self.win, meta["copy_attr"]),
+                on_edit=getattr(self.win, meta["edit_attr"]),
+                on_delete=getattr(self.win, meta["delete_attr"]),
+                **extra,
+            )
+            self._add_reorderable_card(card, all_items, save)
+        if len(items) < 3:
+            self.cards.addStretch(1)
 
     def toggle_card(self, card):
         if self.expanded_card is card:

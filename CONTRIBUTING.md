@@ -286,7 +286,7 @@ DizoClip/
 ├── app/
 │   ├── core/              # Core functionality
 │   │   ├── security.py    # DPAPI encryption
-│   │   ├── storage.py     # Data persistence
+│   │   ├── data_manager.py # Data persistence
 │   │   └── ...
 │   ├── components/        # Reusable UI components
 │   ├── sections/          # Feature modules
@@ -335,7 +335,7 @@ def test_non_string_secret_raises_error():
 pytest
 
 # Run specific test
-pytest tests/test_security.py::test_encrypt_decrypt_roundtrip
+pytest tests/test_data_safety.py
 
 # Run with coverage
 pytest --cov=app
@@ -411,9 +411,6 @@ Add section on DPAPI encryption and key rotation best practices.
 # Simple run
 python main.py
 
-# With debug output
-python main.py --debug
-
 # With profiling
 python -m cProfile -s cumtime main.py
 ```
@@ -434,7 +431,6 @@ import pdb; pdb.set_trace()
 ```bash
 # Install new dependency
 pip install package_name
-pip freeze > requirements.txt
 
 # Format all code
 black .

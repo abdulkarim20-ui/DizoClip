@@ -132,17 +132,53 @@ def unprotect_secret(value: str) -> str:
     return value
 
 
+_TRANSIENT_PREFIX = "_"          # in-memory-only flags such as "_decrypt_failed"
+_DROPPED_FIELDS = ("masked",)    # legacy plaintext fragment; never stored again
+
+
 def protect_key_record(record: dict) -> dict:
-    out = dict(record)
-    if "full_key" in out and isinstance(out["full_key"], str):
-        value = out["full_key"]
-        if not value.startswith(("dpapi:", "plain:")):
-            out["full_key"] = protect_secret(value)
+    out = {
+        k: v for k, v in record.items()
+        if not k.startswith(_TRANSIENT_PREFIX) and k not in _DROPPED_FIELDS
+    }
+    value = out.get("full_key")
+    if isinstance(value, str) and value and not value.startswith(("dpapi:", "plain:")):
+        out["full_key"] = protect_secret(value)
     return out
 
 
 def unprotect_key_record(record: dict) -> dict:
-    out = dict(record)
-    if "full_key" in out and isinstance(out["full_key"], str):
-        out["full_key"] = unprotect_secret(out["full_key"])
+    out = {k: v for k, v in record.items() if k not in _DROPPED_FIELDS}
+    value = out.get("full_key")
+    if isinstance(value, str):
+        try:
+            out["full_key"] = unprotect_secret(value)
+        except SecretProtectionError:
+            # Keep the encrypted blob so a later save cannot destroy it, and flag the
+            # record so the UI can refuse to copy/show it.
+            out["_decrypt_failed"] = True
     return out
+
+
+TEXT_PREFIX = "dzc1:"   # versioned envelope for prompts / commands / snippets
+
+
+def protect_text(value: str) -> str:
+    """Always encrypts (in memory the text is always plain)."""
+    return TEXT_PREFIX + protect_secret(value)
+
+
+def unprotect_text(value: str) -> str:
+    """Decrypts values written by protect_text(); anything else passes through unchanged."""
+    if not (isinstance(value, str) and value.startswith(TEXT_PREFIX)):
+        return value
+    return unprotect_secret(value[len(TEXT_PREFIX):])
+
+
+def map_text(value, fn):
+    """Apply fn to a string, or to every string value of a dict. Other types are left alone."""
+    if isinstance(value, str):
+        return fn(value) if value else value
+    if isinstance(value, dict):
+        return {k: map_text(v, fn) for k, v in value.items()}
+    return value

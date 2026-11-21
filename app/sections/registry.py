@@ -71,3 +71,35 @@ SECTION_REGISTRY = {
         "add_btn_text": "Add command",
     },
 }
+
+
+def _has(text, *values):
+    return any(text in (v or "").lower() for v in values)
+
+
+_MATCHERS = {
+    "key-round": lambda k, t: _has(t, k.get("label")),
+    "prompt": lambda p, t: _has(t, p.get("name") or p.get("title"), p.get("prompt") or p.get("content")),
+    "ai_model": lambda m, t: _has(t, m.get("name"), m.get("provider"), *m.get("snippets", {}).values()),
+    "link": lambda l, t: _has(t, l.get("title"), l.get("url")),
+    "command": lambda c, t: _has(t, c.get("title"), c.get("command")),
+}
+
+_WIRING = {
+    "key-round": dict(items_attr="keys", save_attr="save_keys", copy_attr="copy_key",
+                      edit_attr="show_edit_view", delete_attr="confirm_delete_key"),
+    "prompt": dict(items_attr="prompts", save_attr="save_prompts", copy_attr="copy_prompt",
+                   edit_attr="show_edit_prompt_view", delete_attr="confirm_delete_prompt"),
+    "ai_model": dict(items_attr="ai_models", save_attr="save_ai_models", copy_attr="copy_ai_model",
+                     edit_attr="show_edit_ai_model_view", delete_attr="confirm_delete_ai_model"),
+    "link": dict(items_attr="links", save_attr="save_links", copy_attr="copy_link",
+                 edit_attr="show_edit_link_view", delete_attr="confirm_delete_link",
+                 card_kwargs=lambda win: {"on_open": win.open_link}),
+    "command": dict(items_attr="commands", save_attr="save_commands", copy_attr="copy_command",
+                    edit_attr="show_edit_command_view", delete_attr="confirm_delete_command"),
+}
+
+for _id, _match in _MATCHERS.items():
+    SECTION_REGISTRY[_id]["match"] = _match
+    SECTION_REGISTRY[_id].update(_WIRING[_id])
+SECTION_REGISTRY["sparkles-2"] = SECTION_REGISTRY["ai_model"]  # legacy alias

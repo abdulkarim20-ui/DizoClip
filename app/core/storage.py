@@ -4,8 +4,11 @@ Provides backward-compatible adapters delegating to DataManager and direct custo
 """
 
 import json
+import logging
 import os
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger(__name__)
 
 from app.config.paths import CUSTOM_COLORS_FILE, LEGACY_CUSTOM_COLORS_FILE
 
@@ -52,6 +55,7 @@ def save_custom_colors_to_disk(colors: List[str]) -> None:
             os.fsync(f.fileno())
         os.replace(tmp_path, CUSTOM_COLORS_FILE)
     except OSError:
+        log.warning("Could not save custom colors", exc_info=True)
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)

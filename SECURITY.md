@@ -47,32 +47,23 @@ All sensitive data (API keys, secrets) is encrypted using **Windows Data Protect
 #### Key Security Properties
 
 - ✅ **User Account Bound**: Encryption key is tied to your Windows user account
-- ✅ **Machine Specific**: Encrypted data cannot be transferred between computers
+- ✅ **Machine Specific**: Tied to your Windows user account; normally not decryptable elsewhere
 - ✅ **Automatic**: No manual key management required
-- ✅ **Hardware Backed** (Optional): Uses TPM if available for additional security
 - ✅ **Transparent**: Encryption/decryption happens automatically
 
 ### Data Encrypted
 
 | Data Type | Encrypted? | Protected Location |
 | :--- | :---: | :--- |
-| API Keys & Secrets | ✅ Yes | `User_Data/DC_Keys.json` |
-| Environment Variables | ✅ Yes | `User_Data/DC_Keys.json` |
-| Tokens & Credentials | ✅ Yes | `User_Data/DC_Keys.json` |
-| Prompts (text) | ❌ No | `User_Data/DC_Prompts.json` |
-| Code Snippets / Models | ❌ No | `User_Data/DC_AI_Models.json` |
+| API Keys & Secrets | ✅ Yes (always) | `User_Data/DC_Keys.json` |
+| Prompts (text) | ✅ Yes (default) | `User_Data/DC_Prompts.json` |
+| Code Snippets / Models | ✅ Yes (default) | `User_Data/DC_AI_Models.json` |
+| Terminal Commands | ✅ Yes (default) | `User_Data/DC_Commands.json` |
 | Links | ❌ No | `User_Data/DC_Links.json` |
-| Terminal Commands | ❌ No | `User_Data/DC_Commands.json` |
 | Settings | ❌ No | `User_Data/DC_Settings.json` |
 | Custom Colors | ❌ No | `User_Data/DC_Custom_Colors.json` |
 
-### Data NOT Encrypted
-
-Prompts, code snippets, links, and commands are stored in **plaintext JSON**. This is intentional:
-
-- These items typically contain no sensitive information
-- Encryption adds unnecessary complexity
-- Plaintext allows easier manual editing if needed
+Prompts, commands, and snippets are protected on disk when **Encrypt All Data** is enabled in Settings (on by default). Before reinstalling Windows or migrating PCs, use **Settings → Data → Export Data** to create a passphrase-protected backup.
 - **Sensitive content in prompts? Use the API Keys module instead**
 
 ---
@@ -113,25 +104,11 @@ Sensitive fields (like API keys) can be masked in the UI:
 - **Hidden State**: Shows asterisks `* * * * * * *` instead of actual value
 - **Reveal State**: Shows full secret on click (no timeout auto-hide)
 - **Not Logged**: Reveal actions are not logged anywhere
-- **Memory Safe**: Secrets stay in application memory only
+- **Memory Safe**: Secrets stay in application memory only; a copied secret sits in the Windows clipboard until cleared (auto-clears after 30 seconds)
 
 ### File Permissions
 
-User data directory permissions:
-
-```bash
-User_Data/                    # Owner: Current User (RW)
-├── DC_Keys.json              # Owner: Current User (RW)
-├── DC_Prompts.json           # Owner: Current User (RW)
-├── DC_AI_Models.json         # Owner: Current User (RW)
-├── DC_Links.json             # Owner: Current User (RW)
-├── DC_Commands.json          # Owner: Current User (RW)
-├── DC_Settings.json          # Owner: Current User (RW)
-├── DC_Custom_Colors.json     # Owner: Current User (RW)
-└── Backups/                  # Owner: Current User (RW)
-```
-
-Only your user account has access to these files.
+User data directory files inherit the parent folder's permissions.
 
 ---
 
@@ -139,7 +116,7 @@ Only your user account has access to these files.
 
 ### Zero Network Activity
 
-DizoClip performs **ZERO network calls**:
+DizoClip performs **ZERO network calls on its own**:
 
 - ✅ No telemetry or analytics
 - ✅ No crash reporting to external servers
@@ -153,18 +130,6 @@ DizoClip performs **ZERO network calls**:
 - No cloud sync
 - No account creation or login
 - No backend servers
-
-### Blocked Domains (Windows Firewall)
-
-If you want extra assurance, you can block these domains in Windows Firewall:
-
-```
-- analytics.*.com
-- telemetry.microsoft.com
-- cdn.*.com
-```
-
-(These won't help since DizoClip doesn't call them, but good general practice)
 
 ---
 
@@ -207,9 +172,8 @@ Use DizoClip's encrypted storage for:
 If you discover a security vulnerability:
 
 1. **Do NOT open a public GitHub issue**
-2. **Email privately**: Send details to security@abdulkarim.dev
+2. **Report privately**: Use GitHub Security Advisories (Private Vulnerability Reporting)
 3. **Include**: Version, OS, steps to reproduce
-4. **Responsible Disclosure**: Allow 90 days for fix before publishing
 
 ---
 
@@ -217,39 +181,29 @@ If you discover a security vulnerability:
 
 ### Automatic Backups
 
-DizoClip creates timestamped backups before every modification:
+DizoClip creates timestamped backups per dataset before every modification:
 
 ```
 User_Data/Backups/
-├── DC_Keys_2026-09-18_143022.json.bak
-├── DC_Keys_2026-09-18_150145.json.bak
-├── DC_Keys_2026-09-18_152330.json.bak
+├── DC_Keys/
+│   ├── 20260918-143022-123456.json
+│   └── ...
+├── DC_Prompts/
 └── ...
 ```
 
 ### Retention
 
-- Keeps last 100 backups
-- Automatically removes older backups
-- **Never deleted manually** unless you delete the Backups folder
-
-### Manual Backup
-
-To create a manual backup:
-
-```bash
-# Copy entire User_Data folder
-xcopy User_Data C:\Backups\DizoClip_backup /E /I /H
-```
+- Kept per dataset: saving settings can never evict API key backups
+- Policy: newest 10 snapshots per dataset + 1 per day for the last 14 days
+- Debounced: burst saves (e.g. dragging cards) are limited to 1 snapshot every 30 seconds
+- Unchanged saves: byte-identical data creates no backup and writes nothing
 
 ### Restore from Backup
 
-```bash
-# Stop DizoClip (close the app)
-# Replace corrupted file with backup
-copy User_Data\Backups\DC_Keys_2026-09-18_143022.json.bak User_Data\DC_Keys.json
-# Restart DizoClip
-```
+To restore data:
+- In app: open **Settings → Data → Restore from Backup**, choose the dataset and timestamp, and click **Restore**.
+- If a data file is damaged on start-up, DizoClip automatically displays a recovery dialog offering to restore the most recent valid backup. Damaged files are quarantined in `User_Data/Corrupt/`.
 
 ---
 
@@ -310,38 +264,23 @@ Always install Windows security updates:
 
 ## 📋 Compliance & Standards
 
-### What DizoClip Follows
-
-| Standard | Compliance | Notes |
-| :--- | :---: | :--- |
-| OWASP Top 10 | ✅ | Secure coding practices |
-| NIST Cybersecurity | ✅ | Defense in depth approach |
-| GDPR (Personal Data) | ✅ | Your data stays local |
-| HIPAA (Healthcare) | ⚠️ | Use only for non-regulated data |
-| PCI-DSS (Payment Cards) | ❌ | Not certified for card storage |
-| SOC 2 | ❌ | Single-user app, not required |
-
-### What DizoClip Does NOT Comply With
-
-- PCI-DSS: Don't store payment card numbers
-- HIPAA: Don't store protected health information
-- SOX: Not for regulated financial use
+DizoClip is a local developer tool and has not been independently audited.
 
 ---
 
 ## ❓ Frequently Asked Questions
 
 ### Q: Is my data encrypted end-to-end?
-**A:** Yes. Encryption is applied at rest locally on your machine using Windows DPAPI.
+**A:** Encrypted at rest with Windows DPAPI. There is no sync, so end-to-end encryption does not apply.
 
 ### Q: Can I access my encrypted keys from another computer?
-**A:** No. DPAPI encryption is machine-specific and user-specific. Keys cannot be transferred between computers.
+**A:** DPAPI keys are bound to your Windows account. To transfer data to another computer, use **Settings → Data → Export Data** to create a passphrase-protected encrypted `.dizoclip` bundle, then import it on the new machine.
 
 ### Q: What if I forget my Windows password?
-**A:** Unfortunately, you cannot decrypt DPAPI data without your Windows user credentials. Create a recovery disk before this happens.
+**A:** Unfortunately, you cannot decrypt DPAPI data without your Windows user credentials. Create a passphrase-protected export before reinstalling or resetting your account.
 
 ### Q: Is the source code auditable?
-**A:** Yes! DizoClip is open-source. You can review the security implementation in `app/core/security.py` and `app/core/storage.py`.
+**A:** Yes! DizoClip is open-source. You can review the security implementation in `app/core/security.py` and `app/core/data_manager.py`.
 
 ### Q: How do I verify the app isn't sending data somewhere?
 **A:** Use network monitoring tools like Wireshark. DizoClip has zero internet connectivity and makes no external requests.
@@ -373,7 +312,7 @@ Always install Windows security updates:
 
 For security questions or concerns:
 
-- **Security Issues**: security@abdulkarim.dev (responsible disclosure)
+- **Security Issues**: Report privately via GitHub Security Advisories
 - **General Questions**: Open an issue on GitHub
 - **Feature Requests**: Discussions tab on GitHub
 

@@ -12,7 +12,7 @@
   [![PySide6](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://wiki.qt.io/Qt_for_Python)
   [![Windows](https://img.shields.io/badge/Platform-Windows%2010%2B-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://microsoft.com/windows)
   [![License](https://img.shields.io/badge/License-MIT-orange?style=for-the-badge)](LICENSE)
-  [![Security](https://img.shields.io/badge/Security-DPAPI%20Encrypted-success?style=for-the-badge)](docs/security.md)
+  [![Security](https://img.shields.io/badge/Security-DPAPI%20Encrypted-success?style=for-the-badge)](SECURITY.md)
 
   [🚀 Quick Start](#-quick-start) • [📖 Features](#-features) • [🎨 Screenshots](#-screenshots) • [🛡️ Security](#-security) • [📝 License](#-license)
 
@@ -42,7 +42,7 @@ Developers constantly suffer from **context switching**:
 | **Lost Prompts** | Dedicated prompts library with multiline preview and instant access |
 | **Language Switching** | Multi-language code snippets (Python, Node.js, Shell, LangChain) in every card |
 | **Bookmark Hell** | Consolidated quick links hub with direct browser launch |
-| **Forgotten Commands** | Terminal command library with syntax highlighting and instant copy |
+| **Forgotten Commands** | Terminal command library with instant copy |
 | **Privacy Concerns** | **100% Offline & Local**: No cloud sync, no accounts, no telemetry. Your data never leaves your device. |
 
 ---
@@ -128,9 +128,8 @@ Build a personal repository of system prompts, instructions, and templates for C
 Reference multi-language code examples for initializing and using your favorite AI model APIs.
 
 **What it does:**
-- ✅ Pre-built snippets for popular models (OpenAI, Anthropic, Google, etc.)
 - ✅ **Multi-language switcher**: Python, Node.js, Shell (cURL), LangChain
-- ✅ Syntax-highlighted code display
+- ✅ Clean monospace code display
 - ✅ One-click copy with language-aware formatting
 - ✅ Color-coded categorization
 - ✅ Full-text search across models and snippets
@@ -177,7 +176,7 @@ Centralize your most-used dashboards, cloud consoles, documentation, and environ
 Keep your Docker commands, Git recipes, Kubernetes manifests, and database queries organized and instantly copyable.
 
 **What it does:**
-- ✅ Store complex CLI commands with descriptions
+- ✅ Store complex CLI commands with a title
 - ✅ Monospace font rendering (JetBrains Mono) for clarity
 - ✅ One-click copy with checkmark feedback
 - ✅ Full-text search across all commands
@@ -284,7 +283,7 @@ Secret → Windows DPAPI CryptProtectData → Encrypted at Rest → Local File
 - Secrets encrypted using Windows DPAPI (`crypt32.dll`)
 - Encryption key bound to your Windows user account
 - Only you can decrypt data on your machine
-- **Zero network calls** - no cloud sync
+- **DizoClip never makes network requests on its own** - no cloud sync
 
 #### 💾 Atomic Writes & Backups
 - All data writes are atomic (written to temp, flushed to disk, then committed)
@@ -311,7 +310,8 @@ DizoClip adapts to your deployment:
 | **Portable** | `<exe_dir>/User_Data/` | When `portable.flag` exists next to executable |
 | **Installed** | `%APPDATA%\DizoClip\User_Data\` | Standard Windows installation |
 
-All data is stored locally in JSON format with automatic backup management.
+All data is stored locally in JSON format with automatic per-dataset backup management.
+API keys and encrypted items are tied to your Windows user account. Passphrase-protected Export/Import in Settings allows moving data between PCs.
 
 ---
 
@@ -426,42 +426,18 @@ We welcome contributions! Feel free to:
 
 ## 📖 Documentation
 
-- [Security Deep Dive](docs/security.md) - Encryption and privacy details
-- [Architecture Guide](docs/architecture.md) - Internal structure and components
-- [Settings Reference](docs/settings.md) - All customization options
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
-
----
-
-## ⚡ Performance
-
-DizoClip is engineered for speed:
-
-- ⚡ **Instant Launch**: Loads in under 1 second
-- 🎯 **Fast Search**: Full-text search across 1000+ items in <100ms
-- 💾 **Minimal Memory**: ~50MB RAM during operation
-- 🔄 **Smooth Animations**: 60 FPS window transitions
-- 🖥️ **Low CPU**: Idle CPU usage <1%
+- [Security & Privacy](SECURITY.md) - Encryption, local storage, and security details
 
 ---
 
 ## 🗺️ Roadmap
 
-### Upcoming Features (v1.1)
-
+### Next
 - [ ] Tags system for advanced organization
-- [ ] Export/Import functionality for backups
 - [ ] Custom hotkey support for quick access
 - [ ] Command execution helpers
-- [ ] Prompt versioning and history
-- [ ] Dark/Light theme toggle
-
-### Future Considerations
-
-- Multi-device sync (encrypted end-to-end)
-- Browser extension for direct capture
-- Mobile companion app
-- Team collaboration features (local network only)
+- [ ] Prompt variables (`{{name}}`)
+- [ ] Global search across all modules
 
 ---
 
@@ -469,20 +445,21 @@ DizoClip is engineered for speed:
 
 ### DizoClip won't launch
 ```bash
-# Try running with verbose output
-python main.py --debug
+# Run from a terminal to see errors
+python main.py
 ```
 
 ### Data not saving
 - Check that `User_Data/` directory has write permissions
 - Ensure you have space on disk
 - Review backups in `User_Data/Backups/`
+- Use Settings → Data → Restore from Backup
 
 ### Secrets not decrypting
 - Only accessible from the Windows user account that encrypted them
-- Switching user accounts requires re-entering secrets
+- Use Settings → Data → Export / Import to migrate between accounts or PCs
 
-For more help, see [Troubleshooting Guide](docs/troubleshooting.md) or open a [GitHub Issue](https://github.com/abdulkarim20-ui/DizoClip/issues).
+For more help, open a [GitHub Issue](https://github.com/abdulkarim20-ui/DizoClip/issues).
 
 ---
 

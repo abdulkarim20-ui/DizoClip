@@ -164,6 +164,7 @@ class CommandFormView(QWidget):
             self.editing["title"] = title
             self.editing["command"] = command
             self.editing["color"] = self.selected_color
+            self.editing.pop("_decrypt_failed", None)
         else:
             new_id = f"cmd_{now_ms}_{uuid.uuid4().hex[:5]}"
             self.win.commands.insert(0, {

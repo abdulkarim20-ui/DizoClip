@@ -38,15 +38,13 @@ def test_corrupt_json_does_not_become_empty(tmp_path: Path):
 
 
 def test_existing_dataset_is_backed_up_before_save(tmp_path: Path):
-    dm = DataManager(tmp_path)
+    dm = DataManager(tmp_path, backup_min_interval=0)
     dm.load_all()
 
     dm.save("links", [{"title": "One", "url": "https://example.com"}])
     dm.save("links", [{"title": "Two", "url": "https://example.org"}])
 
-    snapshots = dm.backups.list_snapshots()
-    assert snapshots
-    assert any((snap / "DC_Links.json").exists() for snap in snapshots)
+    assert dm.backups_for("links")
 
 
 def test_atomic_save_round_trip(tmp_path: Path):
