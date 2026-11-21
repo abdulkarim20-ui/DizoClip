@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -45,6 +45,7 @@ from app.core.export_import import (
     ExportError,
     item_title,
 )
+from app.core.icons import render_padded_pixmap
 from app.core.window_utils import apply_dark_title_bar
 
 TREE_QSS = f"""
@@ -214,6 +215,10 @@ class ExportDialog(QDialog):
             QPushButton:disabled {{ background: #3a2e2a; color: #7a6a62; }}
         """)
         self.export_btn.clicked.connect(self._on_export)
+        pm_export = render_padded_pixmap("export", (14, 14), (17, 14), color="#0b0d10", pad_right=3)
+        if pm_export:
+            self.export_btn.setIcon(QIcon(pm_export))
+            self.export_btn.setIconSize(QSize(17, 14))
         row.addWidget(cancel)
         row.addWidget(self.export_btn)
         root.addLayout(row)

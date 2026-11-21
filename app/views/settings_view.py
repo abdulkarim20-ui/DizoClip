@@ -36,7 +36,7 @@ from app.core.export_import import (
     is_encrypted_bundle,
     read_bundle,
 )
-from app.core.icons import render_pixmap
+from app.core.icons import render_padded_pixmap, render_pixmap
 from app.sections.registry import SECTION_REGISTRY
 
 
@@ -347,10 +347,10 @@ class SettingsView(QWidget):
         body_lay.addWidget(sec_data)
         body_lay.addWidget(self._action_card(
             "Export Data", "Export to encrypted, plain JSON, or .env format",
-            "Export", self._on_export_clicked))
+            "Export", self._on_export_clicked, icon="export"))
         body_lay.addWidget(self._action_card(
             "Import Data", "Import from .dizoclip, .json, or .env files",
-            "Import", self._on_import_clicked))
+            "Import", self._on_import_clicked, icon="import"))
 
         # 4. Section: Interaction
         sec_interaction = QLabel("Interaction")
@@ -504,7 +504,7 @@ class SettingsView(QWidget):
         scroll.setWidget(body)
         root.addWidget(scroll, 1)
 
-    def _action_card(self, title: str, subtitle: str, button_text: str, on_click) -> QFrame:
+    def _action_card(self, title: str, subtitle: str, button_text: str, on_click, icon: str | None = None) -> QFrame:
         """Settings card with a title, a one-line subtitle and a small button on the right."""
         card = QFrame()
         card.setObjectName("Card")
@@ -527,11 +527,16 @@ class SettingsView(QWidget):
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: #161821; border: 1px solid {CARD_BORDER}; border-radius: 6px;
-                color: #ffffff; font-size: 11.5px; font-weight: 600; padding: 0 12px;
+                color: #ffffff; font-size: 11.5px; font-weight: 600; padding: 0 12px 0 10px;
             }}
             QPushButton:hover {{ background: #1a1e2a; border-color: #3b4354; }}
         """)
         btn.clicked.connect(on_click)
+        if icon:
+            pm = render_padded_pixmap(icon, (14, 14), (17, 14), color="#ffffff", pad_right=3)
+            if pm:
+                btn.setIcon(QIcon(pm))
+                btn.setIconSize(QSize(17, 14))
         row.addWidget(btn, 0, Qt.AlignVCenter)
         lay.addLayout(row)
 

@@ -9,8 +9,8 @@ Nothing is deleted or overwritten.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -26,6 +26,7 @@ from app.components.dialogs.export_dialog import TREE_QSS
 from app.components.inputs.check_style import GroupChecks, check_qss
 from app.config.theme import ACCENT, BG_INPUT, BG_MAIN, BORDER, SUCCESS, TEXT_DIM, TEXT_MAIN
 from app.core.export_import import CHANGED, DATASET_LABELS, EXPORT_DATASETS, NEW, SAME, ImportPlan
+from app.core.icons import render_padded_pixmap
 from app.core.window_utils import apply_dark_title_bar
 
 _STATUS = {
@@ -136,6 +137,10 @@ class ImportDialog(QDialog):
             QPushButton:disabled {{ background: #3a2e2a; color: #7a6a62; }}
         """)
         self.import_btn.clicked.connect(self.accept)
+        pm_import = render_padded_pixmap("import", (14, 14), (17, 14), color="#0b0d10", pad_right=3)
+        if pm_import:
+            self.import_btn.setIcon(QIcon(pm_import))
+            self.import_btn.setIconSize(QSize(17, 14))
         row.addWidget(cancel)
         row.addWidget(self.import_btn)
         root.addLayout(row)
