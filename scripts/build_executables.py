@@ -17,9 +17,9 @@ sys.path.insert(0, str(ROOT_DIR))
 from app import __version__ as APP_VERSION  # noqa: E402
 DIST_DIR = ROOT_DIR / "dist"
 BUILD_DIR = ROOT_DIR / "build"
-SETUP_ROOT = Path("X:/Playground/setup") if Path("X:/Playground/setup").is_dir() else ROOT_DIR.parent / "setup"
-PORTABLE_DIR = SETUP_ROOT / "Portable"
-INSTALLED_DIR = SETUP_ROOT / "Installed"
+RELEASE_DIR = ROOT_DIR / "release"
+PORTABLE_DIR = RELEASE_DIR / "Portable"
+INSTALLED_DIR = RELEASE_DIR / "Installed"
 ASSETS_DIR = ROOT_DIR / "assets"
 ICON_PATH = ASSETS_DIR / "app_logo.ico"
 
