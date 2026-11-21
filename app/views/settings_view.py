@@ -443,7 +443,7 @@ class SettingsView(QWidget):
             "Export Data", "Export to encrypted, plain JSON, or .env format",
             "Export", self._on_export_clicked))
         body_lay.addWidget(self._action_card(
-            "Import Data", "Preview and import from .dizoclip, .json, or .env files",
+            "Import Data", "Import from .dizoclip, .json, or .env files",
             "Import", self._on_import_clicked))
 
         # 5. Section: About
