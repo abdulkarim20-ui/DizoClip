@@ -99,8 +99,6 @@ class ImportDialog(QDialog):
         self._fill_tree()
 
         notes = []
-        if plan.keys_without_secret:
-            notes.append(f"{plan.keys_without_secret} API key(s) had no secret and were skipped.")
         if plan.invalid:
             notes.append(f"{plan.invalid} damaged item(s) were skipped.")
         if notes:

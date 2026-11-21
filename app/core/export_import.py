@@ -2,15 +2,18 @@
 Export / import for DizoClip.
 Pure Python: no Qt in here, so it is easy to test.
 
-Two file formats share one envelope {magic, version, ...}:
-  * Encrypted (.dizoclip)  {magic, version, kdf{...}, data:<Fernet token>}
-    Unchanged from v1. `data` is a Fernet token; the key comes from scrypt(passphrase, salt).
-  * Plain JSON (.json)     {magic, version, kind:"plain", meta{...}, data{...}}
-    Readable and editable in VS Code. Nothing is encrypted.
+There is ONE file format: encrypted (.dizoclip)
+  {magic, version, kdf{...}, data:<Fernet token>}
+  `data` is a Fernet token; the key comes from scrypt(passphrase, salt).
+  Files made by earlier versions of this format still open.
 
-Both carry the same `data` mapping:
+The decrypted `data` is a mapping:
   {"keys": [...], "prompts": [...], "ai_models": [...], "links": [...], "commands": [...]}
   (only the sections the user chose to share).
+
+Plain JSON and .env files are deliberately NOT supported, in either direction: an export
+would leave API keys on disk as readable text, and an import would trust a file nobody
+protected.
 
 Import never deletes or overwrites anything. Every incoming item is compared with
 what is already stored and labelled NEW, SAME (already here) or CHANGED (same item,
@@ -20,7 +23,6 @@ from __future__ import annotations
 
 import base64
 import copy
-import datetime
 import json
 import os
 import time
@@ -53,12 +55,6 @@ _TITLE_FIELDS = {
     "commands": ("title",),
 }
 _ID_PREFIX = {"prompts": "prompt", "ai_models": "model", "links": "link", "commands": "cmd"}
-
-# Field order in plain JSON, so a record reads naturally top to bottom.
-_FIELD_ORDER = (
-    "id", "label", "name", "title", "url", "command", "prompt", "content",
-    "full_key", "snippets", "color", "createdAt", "updatedAt"
-)
 
 
 class ExportError(RuntimeError):
@@ -230,26 +226,19 @@ def item_title(name: str, item: Any) -> str:
 class ExportStats:
     counts: dict[str, int] = field(default_factory=dict)
     skipped_locked: int = 0
-    secrets_included: bool = True
 
     @property
     def total(self) -> int:
         return sum(self.counts.values())
 
 
-def _ordered(item: dict) -> dict:
-    first = {k: item[k] for k in _FIELD_ORDER if k in item}
-    rest = {k: item[k] for k in sorted(item) if k not in first}
-    return {**first, **rest}
-
-
-def prepare_export(selection: dict[str, list], include_secrets: bool = True) -> tuple[dict, ExportStats]:
+def prepare_export(selection: dict[str, list]) -> tuple[dict, ExportStats]:
     """
     `selection` maps dataset name -> the records the user chose to share.
     Returns (payload, stats). Records locked to another Windows account are skipped and counted.
     """
     payload: dict[str, list] = {}
-    stats = ExportStats(secrets_included=include_secrets)
+    stats = ExportStats()
     for name in EXPORT_DATASETS:
         items = selection.get(name)
         if not items:
@@ -258,105 +247,10 @@ def prepare_export(selection: dict[str, list], include_secrets: bool = True) -> 
             1 for i in items if isinstance(i, dict) and i.get("_decrypt_failed")
         )
         cleaned = clean_for_export(name, items)
-        if name == "keys" and not include_secrets:
-            cleaned = [{k: v for k, v in i.items() if k != "full_key"} for i in cleaned]
         if cleaned:
             payload[name] = cleaned
             stats.counts[name] = len(cleaned)
     return payload, stats
-
-
-def build_plain(payload: dict[str, list], stats: ExportStats, app_version: str = "") -> bytes:
-    """Readable JSON for VS Code. Same section names as DizoClip uses internally."""
-    secrets_in_file = stats.secrets_included and bool(payload.get("keys"))
-    meta: dict[str, Any] = {
-        "app": "DizoClip",
-        "app_version": app_version,
-        "exported_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-        "api_key_secrets_included": secrets_in_file,
-        "sections": {
-            name: {"label": DATASET_LABELS[name], "count": len(items)}
-            for name, items in payload.items()
-        },
-    }
-    if secrets_in_file:
-        meta["warning"] = "This file contains API key secrets as readable text. Do not share or commit it."
-
-    envelope = {
-        "magic": MAGIC,
-        "version": FORMAT_VERSION,
-        "kind": "plain",
-        "meta": meta,
-        "data": {name: [_ordered(i) for i in items] for name, items in payload.items()},
-    }
-    return (json.dumps(envelope, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-
-
-def build_env_text(keys: list[dict]) -> str:
-    """Build clean KEY=VALUE environment file content without any metadata."""
-    lines = [
-        "# DizoClip API Keys Export",
-        f"# Exported on {datetime.date.today().isoformat()}",
-        "",
-    ]
-    for k in keys:
-        if not isinstance(k, dict):
-            continue
-        label = str(k.get("label", "")).strip()
-        secret = str(k.get("full_key", "")).strip()
-        if not label and not secret:
-            continue
-        var_name = "".join(c if c.isalnum() or c == "_" else "_" for c in label).strip("_")
-        var_name = var_name.upper() if var_name else "API_KEY"
-        if " " in secret or "\n" in secret or "#" in secret or '"' in secret or "'" in secret:
-            escaped = secret.replace('"', '\\"')
-            lines.append(f'{var_name}="{escaped}"')
-        else:
-            lines.append(f"{var_name}={secret}")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def parse_env_text(text: str) -> list[dict]:
-    """Parse .env / text file into DizoClip key records."""
-    keys = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].strip()
-        if "=" not in line:
-            continue
-        var_name, val = line.split("=", 1)
-        var_name = var_name.strip()
-        val = val.strip()
-        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-            val = val[1:-1]
-            val = val.replace('\\"', '"').replace("\\'", "'")
-        if var_name and val:
-            keys.append({
-                "label": var_name,
-                "full_key": val,
-                "color": "#e8794a",
-                "createdAt": int(time.time() * 1000),
-            })
-    return keys
-
-
-def is_env_bundle(blob: bytes) -> bool:
-    """True if blob appears to be an .env file rather than JSON or encrypted binary."""
-    try:
-        text = blob.decode("utf-8-sig").strip()
-        if not text or text.startswith("{") or text.startswith("["):
-            return False
-        lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
-        if not lines:
-            return False
-        env_lines = sum(1 for l in lines if "=" in l and not l.startswith("="))
-        return env_lines > 0 and env_lines >= len(lines) * 0.7
-    except UnicodeDecodeError:
-        return False
 
 
 def write_bytes_atomic(path: str | Path, blob: bytes) -> None:
@@ -379,23 +273,12 @@ def export_to_file(
     selection: dict[str, list],
     *,
     passphrase: str | None = None,
-    plain: bool = False,
-    env: bool = False,
-    include_secrets: bool = True,
-    app_version: str = "",
 ) -> ExportStats:
-    payload, stats = prepare_export(selection, include_secrets)
+    """Write the chosen records to `path` as an encrypted .dizoclip file."""
+    payload, stats = prepare_export(selection)
     if not payload:
         raise ExportError("Nothing selected to export.")
-    if env:
-        keys = payload.get("keys", [])
-        if not keys:
-            raise ExportError("No API keys selected to export as an .env file.")
-        blob = build_env_text(keys).encode("utf-8")
-    elif plain:
-        blob = build_plain(payload, stats, app_version)
-    else:
-        blob = build_bundle(payload, passphrase or "")  # raises ExportError if too short
+    blob = build_bundle(payload, passphrase or "")  # raises ExportError if too short
     write_bytes_atomic(path, blob)
     return stats
 
@@ -407,38 +290,32 @@ def _parse_envelope(blob: bytes) -> dict:
     try:
         env = json.loads(blob.decode("utf-8-sig"))
     except (ValueError, UnicodeDecodeError) as exc:
-        raise ExportError("This file is not a valid DizoClip export.") from exc
+        raise ExportError(
+            "This file is not a valid DizoClip export. Only encrypted .dizoclip files can be imported."
+        ) from exc
     if not isinstance(env, dict) or env.get("magic") != MAGIC:
-        raise ExportError("This is not a DizoClip export file.")
+        raise ExportError("This is not a DizoClip export file. Only encrypted .dizoclip files can be imported.")
     if env.get("version") != FORMAT_VERSION:
         raise ExportError("This export is from a newer version of DizoClip.")
     return env
 
 
-def is_encrypted_bundle(blob: bytes) -> bool:
-    """True if a passphrase is needed. Raises ExportError if the file is not a DizoClip export."""
-    if is_env_bundle(blob):
-        return False
-    env = _parse_envelope(blob)
-    if env.get("kind") == "plain":
-        if not isinstance(env.get("data"), dict):
-            raise ExportError("This file is not a valid DizoClip export.")
-        return False
-    if "kdf" not in env:
-        raise ExportError("This file is not a valid DizoClip export.")
-    return True
+def require_encrypted_bundle(blob: bytes) -> None:
+    """Raise ExportError unless `blob` is an encrypted DizoClip export (.dizoclip)."""
+    env = _parse_envelope(blob)  # not JSON / not ours / too new / too big -> ExportError
+    if env.get("kind") == "plain" or "kdf" not in env or "data" not in env:
+        raise ExportError(
+            "Only encrypted DizoClip files (.dizoclip) can be imported. "
+            "Plain JSON and .env files are not supported."
+        )
 
 
 def read_bundle(blob: bytes, passphrase: str | None = None) -> dict[str, Any]:
-    """Return the {dataset: [records]} mapping from either file format."""
-    if is_env_bundle(blob):
-        keys = parse_env_text(blob.decode("utf-8-sig"))
-        return {"keys": keys}
-    if is_encrypted_bundle(blob):
-        if not passphrase:
-            raise WrongPassphrase("This file needs a passphrase.")
-        return open_bundle(blob, passphrase)
-    return _parse_envelope(blob)["data"]
+    """Return the {dataset: [records]} mapping from an encrypted .dizoclip file."""
+    require_encrypted_bundle(blob)
+    if not passphrase:
+        raise WrongPassphrase("This file needs a passphrase.")
+    return open_bundle(blob, passphrase)
 
 
 # ----------------------------------------------------------------------------- import planning
@@ -455,7 +332,6 @@ class IncomingItem:
 class ImportPlan:
     items: list[IncomingItem] = field(default_factory=list)
     invalid: int = 0             # malformed records that were dropped
-    keys_without_secret: int = 0 # keys from a "no secrets" export
 
     def count(self, status: str) -> int:
         return sum(1 for i in self.items if i.status == status)
@@ -482,15 +358,8 @@ def plan_import(current: dict[str, list], payload: dict[str, Any]) -> ImportPlan
     plan = ImportPlan()
     for name in EXPORT_DATASETS:
         raw = payload.get(name)
-        if name == "keys" and isinstance(raw, list):
-            plan.keys_without_secret = sum(
-                1 for r in raw
-                if isinstance(r, dict) and not (_is_str(r.get("full_key")) and r.get("full_key"))
-            )
         kept, dropped = sanitize_incoming(name, raw)
         plan.invalid += dropped
-        if name == "keys":
-            plan.invalid -= plan.keys_without_secret  # reported separately, not as "invalid"
 
         index: dict[str, list[dict]] = {}
         for cur in current.get(name, []):
@@ -515,7 +384,6 @@ def plan_import(current: dict[str, list], payload: dict[str, Any]) -> ImportPlan
 
             plan.items.append(IncomingItem(name, item, status, item_title(name, item), existing))
 
-    plan.invalid = max(plan.invalid, 0)
     return plan
 
 

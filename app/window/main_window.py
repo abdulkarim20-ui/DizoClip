@@ -32,7 +32,6 @@ from app.config.constants import (
 from app.config.paths import ASSETS_DIR
 from app.config.theme import BG_MAIN, TEXT_MAIN
 from app.core.clipboard import ClipboardGuard, copy_to_clipboard
-from app import __version__
 from app.core.export_import import (
     EXPORT_DATASETS,
     ExportStats,
@@ -562,26 +561,9 @@ class MainWindow(QMainWindow):
     def _dataset_lists(self) -> dict:
         return {name: getattr(self, name) for name in EXPORT_DATASETS}
 
-    def export_selected(
-        self,
-        path: str,
-        selection: dict,
-        *,
-        passphrase: str | None = None,
-        plain: bool = False,
-        env: bool = False,
-        include_secrets: bool = True,
-    ) -> ExportStats:
-        """Export only the chosen records. Raises ExportError / OSError; the UI reports them."""
-        return export_to_file(
-            path,
-            selection,
-            passphrase=passphrase,
-            plain=plain,
-            env=env,
-            include_secrets=include_secrets,
-            app_version=__version__,
-        )
+    def export_selected(self, path: str, selection: dict, *, passphrase: str | None = None) -> ExportStats:
+        """Export only the chosen records, encrypted. Raises ExportError / OSError."""
+        return export_to_file(path, selection, passphrase=passphrase)
 
     def export_data(self, path: str, passphrase: str) -> None:
         """Export everything, encrypted (the original one-call API)."""

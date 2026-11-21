@@ -1,9 +1,7 @@
 """
-Export dialog: tick exactly what to share, then choose the file type.
+Export dialog: tick exactly what to share, protect it with a passphrase.
 
-  Encrypted (.dizoclip)  protected by a passphrase, opens only in DizoClip
-  Plain JSON (.json)     readable in VS Code, nothing is encrypted
-
+There is one file type: encrypted (.dizoclip). It opens only in DizoClip.
 Locked records (encrypted for another Windows account) are shown but cannot be ticked.
 """
 from __future__ import annotations
@@ -13,11 +11,8 @@ import datetime
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
-    QButtonGroup,
-    QCheckBox,
     QDialog,
     QFileDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -72,7 +67,7 @@ QTreeWidget::item:selected {{
 
 
 class ExportDialog(QDialog):
-    WIDTH, HEIGHT = 360, 540
+    WIDTH, HEIGHT = 360, 450
 
     def __init__(self, win):
         super().__init__(win)
@@ -147,37 +142,13 @@ class ExportDialog(QDialog):
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         root.addWidget(self.tree, 1)
 
-        # format switch
-        seg = QFrame()
-        seg.setStyleSheet(f"QFrame {{ background: {BG_INPUT}; border: 1px solid {BORDER}; border-radius: 8px; }}")
-        seg_lay = QHBoxLayout(seg)
-        seg_lay.setContentsMargins(3, 3, 3, 3)
-        seg_lay.setSpacing(3)
-        self.btn_enc = self._seg_button("Encrypted")
-        self.btn_plain = self._seg_button("Plain JSON")
-        self.btn_env = self._seg_button(".env File")
-        group = QButtonGroup(self)
-        group.setExclusive(True)
-        for b in (self.btn_enc, self.btn_plain, self.btn_env):
-            group.addButton(b)
-            seg_lay.addWidget(b)
-        self.btn_enc.setChecked(True)
-        root.addWidget(seg)
-
-        self.format_hint = QLabel("")
-        self.format_hint.setWordWrap(True)
-        self.format_hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
-        root.addWidget(self.format_hint)
-
-        self.secrets_box = QCheckBox("Include API key secrets")
-        self.secrets_box.setCursor(Qt.PointingHandCursor)
-        root.addWidget(self.secrets_box)
-
-        self.secrets_warn = QLabel("Secrets will be saved as readable text. "
-                                  "Anyone who opens the file can use your keys.")
-        self.secrets_warn.setWordWrap(True)
-        self.secrets_warn.setStyleSheet(f"color: {DANGER}; font-size: 11.5px;")
-        root.addWidget(self.secrets_warn)
+        self.hint = QLabel(
+            "Protected with your passphrase. Opens only in DizoClip. "
+            "A forgotten passphrase can't be recovered."
+        )
+        self.hint.setWordWrap(True)
+        self.hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
+        root.addWidget(self.hint)
 
         self.pw1 = QLineEdit()
         self.pw1.setEchoMode(QLineEdit.Password)
@@ -227,30 +198,9 @@ class ExportDialog(QDialog):
         self.groups = GroupChecks(self.tree)
         self.groups.sync_all()
         self.tree.itemChanged.connect(lambda *_: self._refresh())
-        self.btn_enc.toggled.connect(self._on_format_changed)
-        self.secrets_box.toggled.connect(lambda *_: self._refresh())
         self.pw1.textChanged.connect(lambda *_: self._refresh())
         self.pw2.textChanged.connect(lambda *_: self._refresh())
-        self._on_format_changed()
-
-    def _seg_button(self, text: str) -> QPushButton:
-        b = QPushButton(text)
-        b.setCheckable(True)
-        b.setCursor(Qt.PointingHandCursor)
-        b.setFixedHeight(28)
-        b.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {TEXT_DIM};
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{ color: #ffffff; }}
-            QPushButton:checked {{ background: #232839; color: #ffffff; }}
-        """)
-        return b
+        self._refresh()
 
     def _fill_tree(self) -> None:
         self.tree.blockSignals(True)
@@ -300,41 +250,8 @@ class ExportDialog(QDialog):
             sel.setdefault(name, []).append(rec)
         return sel
 
-    def is_plain(self) -> bool:
-        return self.btn_plain.isChecked()
-
-    def is_env(self) -> bool:
-        return self.btn_env.isChecked()
-
-    def include_secrets(self) -> bool:
-        return self.secrets_box.isChecked()
-
     def _set_all(self, state) -> None:
         self.groups.set_all(state)
-        self._refresh()
-
-    def _on_format_changed(self, *_):
-        plain = self.is_plain()
-        env = self.is_env()
-        if env:
-            self.format_hint.setText(
-                "Clean NAME=KEY lines for project .env files. Zero metadata."
-            )
-        elif plain:
-            self.format_hint.setText(
-                "Readable in VS Code. Nothing in the file is encrypted."
-            )
-        else:
-            self.format_hint.setText(
-                "Protected with your passphrase. Opens only in DizoClip."
-            )
-
-        self.secrets_box.blockSignals(True)
-        # For .env, secrets are naturally included
-        self.secrets_box.setChecked(env or not plain)
-        self.secrets_box.blockSignals(False)
-        self.pw1.setVisible(not plain and not env)
-        self.pw2.setVisible(not plain and not env)
         self._refresh()
 
     def _refresh(self) -> None:
@@ -342,29 +259,16 @@ class ExportDialog(QDialog):
         total = len(self._entries)
         self.count_lbl.setText(f"{len(picked)} of {total} selected")
 
-        has_keys = any(self._entries[i][0] == "keys" for i in picked)
-        self.secrets_box.setVisible(has_keys and not self.is_env())
-        self.secrets_warn.setVisible(
-            has_keys and (self.is_plain() or self.is_env()) and (self.is_env() or self.include_secrets())
-        )
-
+        a, b = self.pw1.text(), self.pw2.text()
         error = ""
-        if not self.is_plain() and not self.is_env():
-            a, b = self.pw1.text(), self.pw2.text()
-            if a and len(a) < MIN_PASSPHRASE:
-                error = f"Use at least {MIN_PASSPHRASE} characters."
-            elif b and a != b:
-                error = "The passphrases don't match."
-        elif self.is_env() and not has_keys:
-            error = "Select at least one API key to export as .env."
+        if a and len(a) < MIN_PASSPHRASE:
+            error = f"Use at least {MIN_PASSPHRASE} characters."
+        elif b and a != b:
+            error = "The passphrases don't match."
         self.pw_error.setText(error)
         self.pw_error.setVisible(bool(error))
 
-        ok = bool(picked)
-        if self.is_env():
-            ok = ok and has_keys
-        elif not self.is_plain():
-            ok = ok and len(self.pw1.text()) >= MIN_PASSPHRASE and self.pw1.text() == self.pw2.text()
+        ok = bool(picked) and len(a) >= MIN_PASSPHRASE and a == b
         self.export_btn.setEnabled(ok and not self._busy)
 
     def showEvent(self, event):
@@ -373,66 +277,27 @@ class ExportDialog(QDialog):
 
     def _on_export(self) -> None:
         sel = self.selection()
-        plain = self.is_plain()
-        env = self.is_env()
-        secrets = True if env else self.include_secrets()
-        has_keys = bool(sel.get("keys"))
-
-        if (plain or env) and has_keys and secrets:
-            warn_msg = (
-                "This .env file will contain your API keys as readable text.\n\n"
-                "Anyone who opens it can use them. Export anyway?"
-                if env else
-                "This file will contain your API keys as readable text.\n\n"
-                "Anyone who opens it can use them. Export anyway?"
-            )
-            answer = QMessageBox.warning(
-                self,
-                "Export",
-                warn_msg,
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-
-        if env:
-            ext, kind = "env", "Environment file (*.env);;Text file (*.txt);;All files (*.*)"
-            default = ".env"
-        elif plain:
-            ext, kind = "json", "Plain JSON (*.json)"
-            default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.{ext}"
-        else:
-            ext, kind = "dizoclip", "DizoClip export (*.dizoclip)"
-            default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.{ext}"
-
-        path, _ = QFileDialog.getSaveFileName(self, "Export DizoClip data", default, kind)
+        default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.dizoclip"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export DizoClip data", default, "DizoClip export (*.dizoclip)"
+        )
         if not path:
             return
 
         self._busy = True
         self.export_btn.setEnabled(False)
         try:
-            stats = self.win.export_selected(
-                path,
-                sel,
-                passphrase=None if (plain or env) else self.pw1.text(),
-                plain=plain,
-                env=env,
-                include_secrets=secrets,
-            )
+            stats = self.win.export_selected(path, sel, passphrase=self.pw1.text())
         except (ExportError, OSError) as exc:
             self._busy = False
             self._refresh()
             QMessageBox.critical(self, "DizoClip", f"Export failed:\n\n{exc}")
             return
 
-        total_exported = len(sel.get("keys", [])) if env else stats.total
-        msg = f"Exported {total_exported} item(s)."
+        msg = f"Exported {stats.total} item(s)."
         if stats.skipped_locked:
             msg += (f"\n\n{stats.skipped_locked} locked item(s) were skipped "
                     "(encrypted for a different Windows account).")
-        if not plain and not env:
-            msg += "\n\nKeep the file and the passphrase safe."
+        msg += "\n\nKeep the file and the passphrase safe."
         QMessageBox.information(self, "DizoClip", msg)
         self.accept()

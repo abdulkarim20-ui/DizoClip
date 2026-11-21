@@ -33,8 +33,8 @@ from app.core.export_import import (
     MAX_IMPORT_BYTES,
     ExportError,
     WrongPassphrase,
-    is_encrypted_bundle,
     read_bundle,
+    require_encrypted_bundle,
 )
 from app.core.icons import render_padded_pixmap, render_pixmap
 from app.sections.registry import SECTION_REGISTRY
@@ -346,10 +346,10 @@ class SettingsView(QWidget):
         sec_data.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
         body_lay.addWidget(sec_data)
         body_lay.addWidget(self._action_card(
-            "Export Data", "Export to encrypted, plain JSON, or .env format",
+            "Export Data", "Export an encrypted backup (.dizoclip)",
             "Export", self._on_export_clicked, icon="export"))
         body_lay.addWidget(self._action_card(
-            "Import Data", "Import from .dizoclip, .json, or .env files",
+            "Import Data", "Import from an encrypted .dizoclip file",
             "Import", self._on_import_clicked, icon="import"))
 
         # 4. Section: Interaction
@@ -597,7 +597,7 @@ class SettingsView(QWidget):
             self,
             "Import DizoClip data",
             "",
-            "DizoClip files (*.dizoclip *.json *.env *.txt);;Environment files (*.env *.txt);;All files (*)",
+            "DizoClip files (*.dizoclip);;All files (*)",
         )
         if not path:
             return
@@ -608,18 +608,16 @@ class SettingsView(QWidget):
             with open(path, "rb") as fh:
                 blob = fh.read()
 
+            require_encrypted_bundle(blob)  # rejects .json / .env before asking for a passphrase
             payload = None
-            if is_encrypted_bundle(blob):
-                while payload is None:  # wrong passphrase -> ask again, Cancel leaves
-                    pw = self._ask_passphrase("Import data", "Passphrase for this file:")
-                    if not pw:
-                        return
-                    try:
-                        payload = read_bundle(blob, pw)
-                    except WrongPassphrase as exc:
-                        QMessageBox.warning(self, "DizoClip", str(exc))
-            else:
-                payload = read_bundle(blob)
+            while payload is None:  # wrong passphrase -> ask again, Cancel leaves
+                pw = self._ask_passphrase("Import data", "Passphrase for this file:")
+                if not pw:
+                    return
+                try:
+                    payload = read_bundle(blob, pw)
+                except WrongPassphrase as exc:
+                    QMessageBox.warning(self, "DizoClip", str(exc))
 
             plan = self.win.plan_import(payload)
         except (ExportError, OSError) as exc:

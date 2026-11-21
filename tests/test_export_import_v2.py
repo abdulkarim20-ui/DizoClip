@@ -1,4 +1,7 @@
-"""Selective export, plain JSON, import preview, and the bug fixes around them."""
+"""Selective export, import preview, and the bug fixes around them.
+
+DizoClip has ONE file format: encrypted .dizoclip. Plain JSON and .env are not supported.
+"""
 
 import json
 import sys
@@ -38,50 +41,47 @@ def link(i, url="a.com"):
     return {"id": f"link_{i}", "title": f"L{i}", "url": url, "color": "#4a7ce8", "createdAt": i}
 
 
-# ------------------------------------------------------------------ plain JSON
-def test_plain_export_is_readable_and_mapped(tmp_path):
-    sel = {
-        "keys": [{"label": "K", "full_key": "sk-1", "color": "#fff"}],
-        "prompts": [prompt(1)],
-    }
-    path = tmp_path / "x.json"
-    stats = ei.export_to_file(
-        path, sel, plain=True, include_secrets=True, app_version="9.9.9"
-    )
-    text = path.read_text(encoding="utf-8")
-    doc = json.loads(text)
-    assert doc["magic"] == ei.MAGIC and doc["kind"] == "plain"
-    assert doc["meta"]["app_version"] == "9.9.9"
-    assert doc["meta"]["sections"]["prompts"] == {"label": "Prompts", "count": 1}
-    assert doc["meta"]["api_key_secrets_included"] is True and "warning" in doc["meta"]
-    assert list(doc["data"]) == ["keys", "prompts"]
-    assert "\n  " in text  # indented, i.e. readable
-    assert list(doc["data"]["prompts"][0])[:2] == ["id", "name"]  # natural field order
+# ------------------------------------------------------------------ one format: encrypted only
+def test_export_is_always_an_encrypted_envelope_with_secrets_inside(tmp_path):
+    sel = {"keys": [{"label": "K", "full_key": "sk-secret-999", "color": "#fff"}], "links": [link(1)]}
+    path = tmp_path / "x.dizoclip"
+    stats = ei.export_to_file(path, sel, passphrase=PW)
+    blob = path.read_bytes()
+    assert set(json.loads(blob)) == {"magic", "version", "kdf", "data"}
+    assert b"sk-secret-999" not in blob  # never readable on disk
+    assert ei.read_bundle(blob, PW)["keys"][0]["full_key"] == "sk-secret-999"  # but it is in there
     assert stats.total == 2
 
 
-def test_plain_export_can_leave_secrets_out(tmp_path):
-    sel = {"keys": [{"label": "K", "full_key": "sk-secret-999"}], "links": [link(1)]}
-    path = tmp_path / "x.json"
-    ei.export_to_file(path, sel, plain=True, include_secrets=False)
-    text = path.read_text(encoding="utf-8")
-    assert "sk-secret-999" not in text and "full_key" not in text
-    assert json.loads(text)["meta"]["api_key_secrets_included"] is False
+def test_export_without_a_passphrase_is_refused_and_writes_nothing(tmp_path):
+    path = tmp_path / "x.dizoclip"
+    with pytest.raises(ei.ExportError):
+        ei.export_to_file(path, {"links": [link(1)]})
+    assert not path.exists()
 
 
-def test_plain_file_round_trips_and_needs_no_passphrase(tmp_path):
-    path = tmp_path / "x.json"
-    ei.export_to_file(path, {"links": [link(1)]}, plain=True)
-    blob = path.read_bytes()
-    assert ei.is_encrypted_bundle(blob) is False
-    assert ei.read_bundle(blob)["links"] == [link(1)]
+def test_plain_json_files_are_rejected_on_import():
+    plain = json.dumps(
+        {"magic": ei.MAGIC, "version": ei.FORMAT_VERSION, "kind": "plain", "meta": {}, "data": {"links": [link(1)]}}
+    ).encode()
+    for fn in (ei.require_encrypted_bundle, ei.read_bundle):
+        with pytest.raises(ei.ExportError, match=r"\.dizoclip"):
+            fn(plain)
+    with pytest.raises(ei.ExportError):
+        ei.read_bundle(plain, PW)  # a passphrase does not make it importable
 
 
-def test_plain_file_saved_with_bom_by_an_editor_still_opens(tmp_path):
-    path = tmp_path / "x.json"
-    ei.export_to_file(path, {"links": [link(1)]}, plain=True)
-    with_bom = b"\xef\xbb\xbf" + path.read_bytes()
-    assert ei.read_bundle(with_bom)["links"] == [link(1)]
+def test_env_files_are_rejected_on_import():
+    env = b"OPENAI_API_KEY=sk-123\nGROQ_API_KEY=gsk-456\n"
+    with pytest.raises(ei.ExportError, match=r"\.dizoclip"):
+        ei.require_encrypted_bundle(env)
+    with pytest.raises(ei.ExportError, match=r"\.dizoclip"):
+        ei.read_bundle(env, PW)
+
+
+def test_the_removed_plaintext_helpers_are_really_gone():
+    for name in ("build_plain", "build_env_text", "parse_env_text", "is_env_bundle", "is_encrypted_bundle"):
+        assert not hasattr(ei, name), name
 
 
 def test_only_chosen_sections_are_written(tmp_path):
@@ -92,7 +92,7 @@ def test_only_chosen_sections_are_written(tmp_path):
 
 def test_nothing_selected_is_an_error(tmp_path):
     with pytest.raises(ei.ExportError):
-        ei.export_to_file(tmp_path / "x.json", {"links": []}, plain=True)
+        ei.export_to_file(tmp_path / "x.dizoclip", {"links": []}, passphrase=PW)
 
 
 def test_short_passphrase_still_rejected_for_selective_export(tmp_path):
@@ -103,9 +103,9 @@ def test_short_passphrase_still_rejected_for_selective_export(tmp_path):
 
 
 def test_export_write_is_atomic_and_leaves_no_temp_file(tmp_path):
-    path = tmp_path / "x.json"
-    ei.export_to_file(path, {"links": [link(1)]}, plain=True)
-    assert path.exists() and not (tmp_path / "x.json.tmp").exists()
+    path = tmp_path / "x.dizoclip"
+    ei.export_to_file(path, {"links": [link(1)]}, passphrase=PW)
+    assert path.exists() and not (tmp_path / "x.dizoclip.tmp").exists()
 
 
 def test_version_1_encrypted_files_from_the_old_app_still_open():
@@ -195,12 +195,11 @@ def test_locked_current_items_are_never_matched():
     assert plan.items[0].status == ei.NEW
 
 
-def test_keys_exported_without_secrets_are_reported_not_imported():
+def test_keys_without_a_secret_are_dropped_as_damaged():
     plan = ei.plan_import(
         {}, {"keys": [{"label": "A"}, {"label": "B"}], "links": [link(1)]}
     )
-    assert plan.keys_without_secret == 2
-    assert plan.invalid == 0
+    assert plan.invalid == 2
     assert [i.dataset for i in plan.items] == ["links"]
 
 
@@ -311,44 +310,39 @@ def test_import_save_failure_leaves_memory_and_disk_consistent(
     win, tmp_path, monkeypatch
 ):
     """BUG P3: a failed save used to leave unsaved items on screen and raise out of the UI."""
-    path = tmp_path / "a.json"
-    ei.export_to_file(path, {"links": [link(9)]}, plain=True)
+    path = tmp_path / "a.dizoclip"
+    ei.export_to_file(path, {"links": [link(9)]}, passphrase=PW)
 
     def boom(*a, **k):
         raise DataError("disk full")
 
     monkeypatch.setattr(win.data_manager, "save_all", boom)
     with pytest.raises(DataError):
-        win.import_data(str(path))
+        win.import_data(str(path), PW)
     assert win.links == []
 
 
 def test_import_updates_lists_in_place(win, tmp_path):
     held = win.links  # another view may hold this very list
-    path = tmp_path / "a.json"
-    ei.export_to_file(path, {"links": [link(1)]}, plain=True)
-    win.import_data(str(path))
+    path = tmp_path / "a.dizoclip"
+    ei.export_to_file(path, {"links": [link(1)]}, passphrase=PW)
+    win.import_data(str(path), PW)
     assert held is win.links and len(held) == 1
 
 
-def test_plain_json_round_trip_between_two_installs(win, tmp_path):
+def test_encrypted_round_trip_between_two_installs(win, tmp_path):
     win.keys.append({"label": "K", "full_key": "sk-777", "color": "#e8794a"})
     win.links.append(link(1))
     win.save_keys()
     win.save_links()
-    path = str(tmp_path / "share.json")
-    win.export_selected(
-        path,
-        {"keys": win.keys, "links": win.links},
-        plain=True,
-        include_secrets=True,
-    )
+    path = str(tmp_path / "share.dizoclip")
+    win.export_selected(path, {"keys": win.keys, "links": win.links}, passphrase=PW)
     from app.core.data_manager import DataManager
     from app.window.main_window import MainWindow
 
     other = MainWindow(DataManager(tmp_path / "other"))
     other.settings["welcome_seen"] = True
-    assert other.import_data(path) == {
+    assert other.import_data(path, PW) == {
         "keys": 1,
         "prompts": 0,
         "ai_models": 0,
@@ -356,7 +350,7 @@ def test_plain_json_round_trip_between_two_installs(win, tmp_path):
         "commands": 0,
     }
     assert other.keys[0]["full_key"] == "sk-777"
-    assert other.import_data(path) == {
+    assert other.import_data(path, PW) == {
         n: 0 for n in ei.EXPORT_DATASETS
     }  # idempotent
 
@@ -430,13 +424,13 @@ def test_export_dialog_locked_items_cannot_be_ticked(win):
     assert d.count_lbl.text() == "1 of 1 selected"
 
 
-def test_export_dialog_rules_for_format_secrets_and_passphrase(win):
+def test_export_dialog_rules_for_passphrase(win):
     from app.components.dialogs.export_dialog import ExportDialog
 
     win.keys.append({"label": "A", "full_key": "k"})
     d = ExportDialog(win)
     d.show()
-    assert not d.is_plain() and d.include_secrets() and not d.export_btn.isEnabled()
+    assert not d.export_btn.isEnabled()  # no passphrase yet
     d.pw1.setText("short")
     d.pw2.setText("short")
     assert not d.export_btn.isEnabled()  # under 8 characters
@@ -445,13 +439,14 @@ def test_export_dialog_rules_for_format_secrets_and_passphrase(win):
     assert not d.export_btn.isEnabled() and "match" in d.pw_error.text()
     d.pw2.setText(PW)
     assert d.export_btn.isEnabled()
-    d.btn_plain.setChecked(True)
-    assert not d.include_secrets()  # safe default for readable files
-    assert (
-        d.export_btn.isEnabled() and not d.secrets_warn.isVisible()
-    )  # no passphrase needed
-    d.secrets_box.setChecked(True)
-    assert d.secrets_warn.isVisible()  # red warning appears
+
+
+def test_export_dialog_has_no_plaintext_options(win):
+    from app.components.dialogs.export_dialog import ExportDialog
+
+    d = ExportDialog(win)
+    for gone in ("btn_plain", "btn_env", "btn_enc", "secrets_box", "secrets_warn"):
+        assert not hasattr(d, gone), gone
 
 
 def test_import_dialog_defaults_to_new_items_only(win):
@@ -549,14 +544,39 @@ def test_settings_import_button_cancel_changes_nothing(
     from PySide6.QtWidgets import QDialog
     from app.components.dialogs.import_dialog import ImportDialog
 
-    path = tmp_path / "a.json"
-    ei.export_to_file(path, {"links": [link(1)]}, plain=True)
+    path = tmp_path / "a.dizoclip"
+    ei.export_to_file(path, {"links": [link(1)]}, passphrase=PW)
     stub_ui["open"](str(path))
+    monkeypatch.setattr(win.settings_view, "_ask_passphrase", lambda *a: PW)
     monkeypatch.setattr(
         ImportDialog, "exec", lambda self: QDialog.Rejected
     )  # user presses Cancel
     win.settings_view._on_import_clicked()
     assert win.links == [] and stub_ui["boxes"] == []
+
+
+@pytest.mark.parametrize(
+    "name, content",
+    [
+        ("plain.json", json.dumps({"magic": ei.MAGIC, "version": 1, "kind": "plain", "meta": {}, "data": {"links": [{"id": "l", "title": "t", "url": "u"}]}})),
+        ("keys.env", "OPENAI_API_KEY=sk-123\n"),
+    ],
+)
+def test_settings_import_button_rejects_json_and_env_without_asking_for_a_passphrase(
+    win, tmp_path, stub_ui, monkeypatch, name, content
+):
+    path = tmp_path / name
+    path.write_text(content, encoding="utf-8")
+    stub_ui["open"](str(path))
+
+    def must_not_ask(*a):
+        raise AssertionError("asked for a passphrase for a file that can never be imported")
+
+    monkeypatch.setattr(win.settings_view, "_ask_passphrase", must_not_ask)
+    win.settings_view._on_import_clicked()
+    kind, text = stub_ui["boxes"][0]
+    assert kind == "critical" and "Import failed" in text
+    assert win.links == [] and win.keys == []
 
 
 def test_settings_import_button_rejects_a_foreign_file(win, tmp_path, stub_ui):
@@ -570,7 +590,7 @@ def test_settings_import_button_rejects_a_foreign_file(win, tmp_path, stub_ui):
     )
 
 
-def test_export_dialog_writes_a_plain_file_with_only_the_ticked_items(
+def test_export_dialog_writes_an_encrypted_file_with_only_the_ticked_items(
     win, tmp_path, stub_ui
 ):
     from PySide6.QtCore import Qt
@@ -579,123 +599,18 @@ def test_export_dialog_writes_a_plain_file_with_only_the_ticked_items(
     win.keys.append({"label": "K", "full_key": "sk-top-secret"})
     win.prompts.extend([prompt(1), prompt(2)])
     d = ExportDialog(win)
-    d.btn_plain.setChecked(True)  # secrets off by default for plain
+    d.pw1.setText(PW)
+    d.pw2.setText(PW)
     _tops(d.tree)["Prompts"].child(1).setCheckState(0, Qt.Unchecked)
-    out = tmp_path / "share.json"
+    out = tmp_path / "share.dizoclip"
     stub_ui["save"](str(out))
     d._on_export()
-    text = out.read_text(encoding="utf-8")
-    assert "sk-top-secret" not in text  # key row exported without its secret
-    doc = json.loads(text)
-    assert [p["id"] for p in doc["data"]["prompts"]] == ["prompt_1"]
+    blob = out.read_bytes()
+    assert b"sk-top-secret" not in blob  # never readable in the file
+    data = ei.read_bundle(blob, PW)
+    assert [p["id"] for p in data["prompts"]] == ["prompt_1"]  # only the ticked prompt
+    assert data["keys"][0]["full_key"] == "sk-top-secret"  # the key travels, encrypted
     assert (
         stub_ui["boxes"][-1][0] == "information"
         and "Exported 2" in stub_ui["boxes"][-1][1]
     )
-
-
-def test_export_dialog_warns_before_writing_secrets_as_plain_text(
-    win, tmp_path, stub_ui, monkeypatch
-):
-    from PySide6.QtWidgets import QMessageBox
-    from app.components.dialogs.export_dialog import ExportDialog
-
-    win.keys.append({"label": "K", "full_key": "sk-top-secret"})
-    d = ExportDialog(win)
-    d.btn_plain.setChecked(True)
-    d.secrets_box.setChecked(True)
-    out = tmp_path / "share.json"
-    stub_ui["save"](str(out))
-    monkeypatch.setattr(
-        QMessageBox, "warning", staticmethod(lambda *a, **k: QMessageBox.No)
-    )  # user says No to the warning
-    d._on_export()
-    assert not out.exists()  # nothing was written
-
-
-# ------------------------------------------------------------------ .env plain text support
-def test_env_export_writes_clean_name_key_lines_without_metadata(tmp_path):
-    sel = {
-        "keys": [
-            {"label": "OPENAI_API_KEY", "full_key": "sk-openai-12345"},
-            {"label": "ANTHROPIC_KEY", "full_key": "sk-ant-67890"},
-        ]
-    }
-    path = tmp_path / ".env"
-    stats = ei.export_to_file(path, sel, env=True)
-    text = path.read_text(encoding="utf-8")
-    assert "OPENAI_API_KEY=sk-openai-12345" in text
-    assert "ANTHROPIC_KEY=sk-ant-67890" in text
-    assert "id" not in text and "createdAt" not in text and "magic" not in text
-    assert stats.total == 2
-
-
-def test_env_file_round_trips_without_passphrase(tmp_path):
-    sel = {
-        "keys": [
-            {"label": "GROQ_API_KEY", "full_key": "gsk-123"},
-            {"label": "GEMINI_API_KEY", "full_key": "AIzaSy-456"},
-        ]
-    }
-    path = tmp_path / ".env"
-    ei.export_to_file(path, sel, env=True)
-    blob = path.read_bytes()
-    assert ei.is_encrypted_bundle(blob) is False
-    incoming = ei.read_bundle(blob)
-    assert len(incoming["keys"]) == 2
-    labels = [k["label"] for k in incoming["keys"]]
-    keys = [k["full_key"] for k in incoming["keys"]]
-    assert "GROQ_API_KEY" in labels and "GEMINI_API_KEY" in labels
-    assert "gsk-123" in keys and "AIzaSy-456" in keys
-
-
-def test_env_file_parses_quotes_and_comments(tmp_path):
-    env_content = (
-        "# Development environment variables\n"
-        "export OPENAI_API_KEY=\"sk-proj-quoted 123\"\n"
-        "MY_SECRET='single-quoted-val'\n"
-        "PLAIN_KEY=sk-plain-val\n"
-        "\n"
-        "# Another comment\n"
-    )
-    path = tmp_path / "custom.env"
-    path.write_text(env_content, encoding="utf-8")
-    bundle = ei.read_bundle(path.read_bytes())
-    assert len(bundle["keys"]) == 3
-    by_label = {k["label"]: k["full_key"] for k in bundle["keys"]}
-    assert by_label["OPENAI_API_KEY"] == "sk-proj-quoted 123"
-    assert by_label["MY_SECRET"] == "single-quoted-val"
-    assert by_label["PLAIN_KEY"] == "sk-plain-val"
-
-
-def test_export_dialog_env_button_exports_clean_env_file(win, tmp_path, stub_ui):
-    from app.components.dialogs.export_dialog import ExportDialog
-
-    win.keys.append({"label": "COHERE_API_KEY", "full_key": "co-secret-999"})
-    d = ExportDialog(win)
-    d.show()
-    d.btn_env.setChecked(True)
-    assert d.is_env() is True
-    assert d.secrets_warn.isVisible() is True
-    out = tmp_path / ".env"
-    stub_ui["save"](str(out))
-    d._on_export()
-    text = out.read_text(encoding="utf-8")
-    assert "COHERE_API_KEY=co-secret-999" in text
-    assert "id" not in text and "color" not in text
-
-
-def test_import_env_file_through_plan_and_dialog(win, tmp_path):
-    from app.components.dialogs.import_dialog import ImportDialog
-
-    path = tmp_path / ".env"
-    path.write_text("NEW_PROVIDER_KEY=sk-provider-111\n", encoding="utf-8")
-    blob = path.read_bytes()
-    incoming = ei.read_bundle(blob)
-    plan = win.plan_import(incoming)
-    assert len(plan.items) == 1
-    assert plan.items[0].status == ei.NEW
-    d = ImportDialog(win, plan, ".env")
-    assert len(d.chosen_indexes()) == 1
-    win.import_selected(plan, {0})
-    assert any(k["label"] == "NEW_PROVIDER_KEY" for k in win.keys)
