@@ -440,16 +440,10 @@ class SettingsView(QWidget):
         sec_data.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
         body_lay.addWidget(sec_data)
         body_lay.addWidget(self._action_card(
-            "Restore from Backup", "Roll a data file back to an earlier backup",
-            "Restore", self._on_restore_clicked))
-        body_lay.addWidget(self._action_card(
-            "Data Folder", "Open the folder where DizoClip stores your data",
-            "Open", self._on_open_folder_clicked))
-        body_lay.addWidget(self._action_card(
-            "Export Data", "Choose what to share, as encrypted or plain JSON",
+            "Export Data", "Export to encrypted, plain JSON, or .env format",
             "Export", self._on_export_clicked))
         body_lay.addWidget(self._action_card(
-            "Import Data", "Preview a file, then add only what you want",
+            "Import Data", "Preview and import from .dizoclip, .json, or .env files",
             "Import", self._on_import_clicked))
 
         # 5. Section: About
@@ -581,16 +575,6 @@ class SettingsView(QWidget):
         self.win.settings["encrypt_all_data"] = checked
         self.win.save_settings()       # DataManager learns the new value here
         self.win.rewrite_all_datasets()
-
-    def _on_restore_clicked(self):
-        from app.components.dialogs.restore_backup import RestoreBackupDialog
-        RestoreBackupDialog(self.win).exec()
-
-    def _on_open_folder_clicked(self):
-        try:
-            self.win.data_manager.open_data_folder()
-        except (DataError, OSError) as exc:
-            QMessageBox.information(self, "DizoClip", str(exc))
 
     def _ask_passphrase(self, title: str, label: str):
         text, ok = QInputDialog.getText(self, title, label, QLineEdit.Password)
