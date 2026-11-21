@@ -341,7 +341,18 @@ class SettingsView(QWidget):
         lay_vis.addWidget(sub4)
         body_lay.addWidget(card_vis)
 
-        # 3. Section: Interaction
+        # 3. Section: Data
+        sec_data = QLabel("Data")
+        sec_data.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
+        body_lay.addWidget(sec_data)
+        body_lay.addWidget(self._action_card(
+            "Export Data", "Export to encrypted, plain JSON, or .env format",
+            "Export", self._on_export_clicked))
+        body_lay.addWidget(self._action_card(
+            "Import Data", "Import from .dizoclip, .json, or .env files",
+            "Import", self._on_import_clicked))
+
+        # 4. Section: Interaction
         sec_interaction = QLabel("Interaction")
         sec_interaction.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
         body_lay.addWidget(sec_interaction)
@@ -434,17 +445,6 @@ class SettingsView(QWidget):
         lay_inter.addWidget(sub_links)
 
         body_lay.addWidget(card_interaction)
-
-        # 4. Section: Data
-        sec_data = QLabel("Data")
-        sec_data.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
-        body_lay.addWidget(sec_data)
-        body_lay.addWidget(self._action_card(
-            "Export Data", "Export to encrypted, plain JSON, or .env format",
-            "Export", self._on_export_clicked))
-        body_lay.addWidget(self._action_card(
-            "Import Data", "Import from .dizoclip, .json, or .env files",
-            "Import", self._on_import_clicked))
 
         # 5. Section: About
         sec_about = QLabel("About")
