@@ -1,0 +1,393 @@
+"""
+Export dialog: tick exactly what to share, then choose the file type.
+
+  Encrypted (.dizoclip)  protected by a passphrase, opens only in DizoClip
+  Plain JSON (.json)     readable in VS Code, nothing is encrypted
+
+Locked records (encrypted for another Windows account) are shown but cannot be ticked.
+"""
+from __future__ import annotations
+
+import datetime
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+)
+
+from app.components.inputs.check_style import GroupChecks, check_qss
+from app.config.theme import (
+    ACCENT,
+    BG_INPUT,
+    BG_MAIN,
+    BORDER,
+    DANGER,
+    TEXT_DIM,
+    TEXT_MAIN,
+)
+from app.core.export_import import (
+    DATASET_LABELS,
+    EXPORT_DATASETS,
+    MIN_PASSPHRASE,
+    ExportError,
+    item_title,
+)
+from app.core.window_utils import apply_dark_title_bar
+
+TREE_QSS = f"""
+QTreeWidget {{
+    background: {BG_INPUT};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 4px;
+    outline: none;
+    color: {TEXT_MAIN};
+}}
+QTreeWidget::item {{
+    padding: 4px 2px;
+    border-radius: 6px;
+}}
+QTreeWidget::item:hover {{
+    background: #1a1e2b;
+}}
+QTreeWidget::item:selected {{
+    background: transparent;
+    color: {TEXT_MAIN};
+}}
+"""
+
+
+class ExportDialog(QDialog):
+    WIDTH, HEIGHT = 340, 540
+
+    def __init__(self, win):
+        super().__init__(win)
+        self.win = win
+        self.setWindowTitle("Export")
+        self.setModal(True)
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {BG_MAIN}; }}
+            QLabel  {{ background: transparent; color: {TEXT_MAIN}; }}
+            QLineEdit {{
+                background: {BG_INPUT};
+                border: 1px solid {BORDER};
+                border-radius: 8px;
+                padding: 6px 10px;
+                color: {TEXT_MAIN};
+            }}
+            QLineEdit:focus {{ border: 1px solid {ACCENT}; }}
+            {TREE_QSS}
+            {check_qss()}
+        """)
+
+        self._entries: list[tuple[str, dict]] = []  # index -> (dataset, record)
+        self._busy = False
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(8)
+
+        title = QLabel("Export")
+        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #ffffff;")
+        root.addWidget(title)
+
+        sub = QLabel("Choose what to share. Only ticked items go into the file.")
+        sub.setWordWrap(True)
+        sub.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
+        root.addWidget(sub)
+
+        # selection header: count + All / None
+        head = QHBoxLayout()
+        head.setSpacing(4)
+        self.count_lbl = QLabel("")
+        self.count_lbl.setStyleSheet(f"color: {ACCENT}; font-size: 11.5px; font-weight: 600;")
+        head.addWidget(self.count_lbl)
+        head.addStretch(1)
+
+        for text, state in (("All", Qt.Checked), ("None", Qt.Unchecked)):
+            b = QPushButton(text)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setFlat(True)
+            b.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {TEXT_DIM};
+                    border: none;
+                    padding: 2px 6px;
+                    font-size: 11.5px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{ color: #ffffff; }}
+            """)
+            b.clicked.connect(lambda _=False, s=state: self._set_all(s))
+            head.addWidget(b)
+        root.addLayout(head)
+
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setIndentation(14)
+        self.tree.setSelectionMode(QTreeWidget.NoSelection)
+        self.tree.setFocusPolicy(Qt.NoFocus)
+        self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        root.addWidget(self.tree, 1)
+
+        # format switch
+        seg = QFrame()
+        seg.setStyleSheet(f"QFrame {{ background: {BG_INPUT}; border: 1px solid {BORDER}; border-radius: 8px; }}")
+        seg_lay = QHBoxLayout(seg)
+        seg_lay.setContentsMargins(3, 3, 3, 3)
+        seg_lay.setSpacing(3)
+        self.btn_enc = self._seg_button("Encrypted")
+        self.btn_plain = self._seg_button("Plain JSON")
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        for b in (self.btn_enc, self.btn_plain):
+            group.addButton(b)
+            seg_lay.addWidget(b)
+        self.btn_enc.setChecked(True)
+        root.addWidget(seg)
+
+        self.format_hint = QLabel("")
+        self.format_hint.setWordWrap(True)
+        self.format_hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
+        root.addWidget(self.format_hint)
+
+        self.secrets_box = QCheckBox("Include API key secrets")
+        self.secrets_box.setCursor(Qt.PointingHandCursor)
+        root.addWidget(self.secrets_box)
+
+        self.secrets_warn = QLabel("Secrets will be saved as readable text. "
+                                  "Anyone who opens the file can use your keys.")
+        self.secrets_warn.setWordWrap(True)
+        self.secrets_warn.setStyleSheet(f"color: {DANGER}; font-size: 11.5px;")
+        root.addWidget(self.secrets_warn)
+
+        self.pw1 = QLineEdit()
+        self.pw1.setEchoMode(QLineEdit.Password)
+        self.pw1.setPlaceholderText(f"Passphrase ({MIN_PASSPHRASE}+ characters)")
+        self.pw2 = QLineEdit()
+        self.pw2.setEchoMode(QLineEdit.Password)
+        self.pw2.setPlaceholderText("Repeat passphrase")
+        root.addWidget(self.pw1)
+        root.addWidget(self.pw2)
+
+        self.pw_error = QLabel("")
+        self.pw_error.setStyleSheet(f"color: {DANGER}; font-size: 11.5px;")
+        root.addWidget(self.pw_error)
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        cancel = QPushButton("Cancel")
+        cancel.setFixedHeight(34)
+        cancel.setCursor(Qt.PointingHandCursor)
+        cancel.clicked.connect(self.reject)
+
+        self.export_btn = QPushButton("Export")
+        self.export_btn.setFixedHeight(34)
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setDefault(True)
+        self.export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {ACCENT};
+                color: #0b0d10;
+                font-weight: 700;
+                border-radius: 8px;
+                border: none;
+            }}
+            QPushButton:hover {{ background: #d5693c; }}
+            QPushButton:disabled {{ background: #3a2e2a; color: #7a6a62; }}
+        """)
+        self.export_btn.clicked.connect(self._on_export)
+        row.addWidget(cancel)
+        row.addWidget(self.export_btn)
+        root.addLayout(row)
+
+        self._fill_tree()
+        self.groups = GroupChecks(self.tree)
+        self.groups.sync_all()
+        self.tree.itemChanged.connect(lambda *_: self._refresh())
+        self.btn_enc.toggled.connect(self._on_format_changed)
+        self.secrets_box.toggled.connect(lambda *_: self._refresh())
+        self.pw1.textChanged.connect(lambda *_: self._refresh())
+        self.pw2.textChanged.connect(lambda *_: self._refresh())
+        self._on_format_changed()
+
+    def _seg_button(self, text: str) -> QPushButton:
+        b = QPushButton(text)
+        b.setCheckable(True)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setFixedHeight(28)
+        b.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_DIM};
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{ color: #ffffff; }}
+            QPushButton:checked {{ background: #232839; color: #ffffff; }}
+        """)
+        return b
+
+    def _fill_tree(self) -> None:
+        self.tree.blockSignals(True)
+        for name in EXPORT_DATASETS:
+            items = list(getattr(self.win, name))
+            label = DATASET_LABELS[name]
+            top = QTreeWidgetItem(self.tree, [f"{label} · {len(items)}"])
+            top.setData(0, Qt.UserRole, name)
+            if not items:
+                top.setFlags(Qt.ItemIsEnabled)
+                top.setForeground(0, QColor(TEXT_DIM))
+                continue
+            top.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+            top.setCheckState(0, Qt.Checked)
+            for rec in items:
+                locked = isinstance(rec, dict) and bool(rec.get("_decrypt_failed"))
+                text = item_title(name, rec) + (" · locked" if locked else "")
+                child = QTreeWidgetItem(top, [text])
+                if locked:
+                    child.setFlags(Qt.ItemIsEnabled)
+                    child.setForeground(0, QColor(TEXT_DIM))
+                    child.setToolTip(0, "Encrypted for a different Windows account, so it can't be exported here.")
+                else:
+                    child.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+                    child.setCheckState(0, Qt.Checked)
+                    child.setData(0, Qt.UserRole, len(self._entries))
+                    self._entries.append((name, rec))
+            top.setExpanded(False)
+        self.tree.blockSignals(False)
+
+    def _checked_indexes(self) -> list[int]:
+        out = []
+        for t in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(t)
+            for c in range(top.childCount()):
+                child = top.child(c)
+                idx = child.data(0, Qt.UserRole)
+                if idx is not None and child.checkState(0) == Qt.Checked:
+                    out.append(int(idx))
+        return out
+
+    def selection(self) -> dict[str, list]:
+        """{dataset: [records]} for everything ticked, in the order shown."""
+        sel: dict[str, list] = {}
+        for idx in self._checked_indexes():
+            name, rec = self._entries[idx]
+            sel.setdefault(name, []).append(rec)
+        return sel
+
+    def is_plain(self) -> bool:
+        return self.btn_plain.isChecked()
+
+    def include_secrets(self) -> bool:
+        return self.secrets_box.isChecked()
+
+    def _set_all(self, state) -> None:
+        self.groups.set_all(state)
+        self._refresh()
+
+    def _on_format_changed(self, *_):
+        plain = self.is_plain()
+        self.format_hint.setText(
+            "Readable in VS Code. Nothing in the file is encrypted."
+            if plain else
+            "Protected with your passphrase. Opens only in DizoClip."
+        )
+        self.secrets_box.blockSignals(True)
+        self.secrets_box.setChecked(not plain)
+        self.secrets_box.blockSignals(False)
+        self.pw1.setVisible(not plain)
+        self.pw2.setVisible(not plain)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        picked = self._checked_indexes()
+        total = len(self._entries)
+        self.count_lbl.setText(f"{len(picked)} of {total} selected")
+
+        has_keys = any(self._entries[i][0] == "keys" for i in picked)
+        self.secrets_box.setVisible(has_keys)
+        self.secrets_warn.setVisible(has_keys and self.is_plain() and self.include_secrets())
+
+        error = ""
+        if not self.is_plain():
+            a, b = self.pw1.text(), self.pw2.text()
+            if a and len(a) < MIN_PASSPHRASE:
+                error = f"Use at least {MIN_PASSPHRASE} characters."
+            elif b and a != b:
+                error = "The passphrases don't match."
+        self.pw_error.setText(error)
+        self.pw_error.setVisible(not self.is_plain())
+
+        ok = bool(picked)
+        if not self.is_plain():
+            ok = ok and len(self.pw1.text()) >= MIN_PASSPHRASE and self.pw1.text() == self.pw2.text()
+        self.export_btn.setEnabled(ok and not self._busy)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        apply_dark_title_bar(self, BG_MAIN, TEXT_MAIN)
+
+    def _on_export(self) -> None:
+        sel, plain, secrets = self.selection(), self.is_plain(), self.include_secrets()
+        has_keys = bool(sel.get("keys"))
+        if plain and has_keys and secrets:
+            answer = QMessageBox.warning(
+                self,
+                "Export",
+                "This file will contain your API keys as readable text.\n\n"
+                "Anyone who opens it can use them. Export anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+        ext, kind = ("json", "Plain JSON (*.json)") if plain else ("dizoclip", "DizoClip export (*.dizoclip)")
+        default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.{ext}"
+        path, _ = QFileDialog.getSaveFileName(self, "Export DizoClip data", default, kind)
+        if not path:
+            return
+
+        self._busy = True
+        self.export_btn.setEnabled(False)
+        try:
+            stats = self.win.export_selected(
+                path,
+                sel,
+                passphrase=None if plain else self.pw1.text(),
+                plain=plain,
+                include_secrets=secrets,
+            )
+        except (ExportError, OSError) as exc:
+            self._busy = False
+            self._refresh()
+            QMessageBox.critical(self, "DizoClip", f"Export failed:\n\n{exc}")
+            return
+
+        msg = f"Exported {stats.total} item(s)."
+        if stats.skipped_locked:
+            msg += (f"\n\n{stats.skipped_locked} locked item(s) were skipped "
+                    "(encrypted for a different Windows account).")
+        if not plain:
+            msg += "\n\nKeep the file and the passphrase safe."
+        QMessageBox.information(self, "DizoClip", msg)
+        self.accept()

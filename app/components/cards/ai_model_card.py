@@ -25,6 +25,12 @@ from app.config.theme import font_css
 from app.core.icons import render_pixmap
 
 
+def _snippets_of(model) -> dict:
+    """The model's {language: code} mapping; anything else (damaged data) counts as empty."""
+    snippets = model.get("snippets")
+    return snippets if isinstance(snippets, dict) else {}
+
+
 class LanguageOptionItem(QPushButton):
     """Dropdown item for snippet language with label and accent checkmark."""
     def __init__(self, lang: str, is_selected: bool, on_select, parent=None):
@@ -239,7 +245,7 @@ class AIModelCard(BaseCard):
         self.on_edit = on_edit
         self.on_delete = on_delete
 
-        snippets = model.get("snippets", {})
+        snippets = _snippets_of(model)
         self.available_langs = list(snippets.keys()) if snippets else ["Python"]
         self.selected_lang = self.available_langs[0]
         self._popover = None
@@ -369,7 +375,7 @@ class AIModelCard(BaseCard):
         self.lang_trigger.set_language(lang)
         self.lang_trigger._apply_style(is_active=False)
 
-        snippets = self.model.get("snippets", {})
+        snippets = _snippets_of(self.model)
         code = snippets.get(lang, "")
         self.preview.setText(code)
         self.copy_btn.setToolTip(f"Copy {lang} snippet")
@@ -378,7 +384,7 @@ class AIModelCard(BaseCard):
         if self.model.get("_decrypt_failed"):
             self.on_copy(self.model, self.copy_btn)
             return
-        snippets = self.model.get("snippets", {})
+        snippets = _snippets_of(self.model)
         val = snippets.get(self.selected_lang, "")
         self.on_copy(val, self.copy_btn)
 

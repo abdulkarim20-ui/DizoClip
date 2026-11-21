@@ -74,13 +74,19 @@ SECTION_REGISTRY = {
 
 
 def _has(text, *values):
-    return any(text in (v or "").lower() for v in values)
+    # Non-text values (hand-edited or damaged data) are ignored instead of crashing the search.
+    return any(text in v.lower() for v in values if isinstance(v, str))
+
+
+def _snippet_values(model):
+    snippets = model.get("snippets")
+    return snippets.values() if isinstance(snippets, dict) else ()
 
 
 _MATCHERS = {
     "key-round": lambda k, t: _has(t, k.get("label")),
     "prompt": lambda p, t: _has(t, p.get("name") or p.get("title"), p.get("prompt") or p.get("content")),
-    "ai_model": lambda m, t: _has(t, m.get("name"), m.get("provider"), *m.get("snippets", {}).values()),
+    "ai_model": lambda m, t: _has(t, m.get("name"), m.get("provider"), *_snippet_values(m)),
     "link": lambda l, t: _has(t, l.get("title"), l.get("url")),
     "command": lambda c, t: _has(t, c.get("title"), c.get("command")),
 }

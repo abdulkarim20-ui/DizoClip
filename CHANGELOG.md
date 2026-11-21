@@ -10,11 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-11-21
 
 ### Added
+- **Selective Export & Import Preview**: Choose categories or single items to share via an interactive checklist dialog.
+- **Plain JSON Export**: Export unencrypted, cleanly formatted `.json` files (readable in VS Code) in addition to encrypted `.dizoclip`.
+- **API Key Secret Control**: Option to include or leave out API key secrets on export, with safety confirmation warnings for plain JSON.
+- **Import Preview**: Displays New / Matched / Changed items before importing; only New items are selected by default, and Changed items can be imported as non-destructive `(imported)` copies.
+- **Unified Import**: Import accepts both `.json` and `.dizoclip` files with automatic wrong-passphrase retry.
 - **Clipboard Auto-Clear**: Automatically wipes copied API keys after 30 seconds if still on the clipboard. Marks clipboard mime data to request exclusion from Windows Clipboard History (`Win+V`) and cloud syncing.
 - **Passphrase-Protected Export & Import**: Export all your data into an encrypted `.dizoclip` bundle using Scrypt and Fernet (AES-128). Safely migrate data to a new PC or Windows account.
 - **Encrypt All Data Setting**: Protect prompts, terminal commands, and AI model snippets on disk using DPAPI encryption (`dzc1:` prefix). Default enabled in Settings.
 - **File Logging**: Standardized rotating diagnostic logs in `User_Data/Logs/dizoclip.log` with automatic secret redaction.
 - **Single-Instance Protection**: Enforced using `QLockFile` so concurrent app instances cannot corrupt data files.
+
+### Fixed
+- Importing an old export after editing an item no longer creates duplicates.
+- Importing damaged data can no longer break the AI Models tab; search and cards tolerate damaged data.
+- A failed save during import no longer leaves unsaved items on screen.
+- Export reports locked items it skipped; export files are written atomically.
 
 ### Changed
 - Surface save failures: disk write errors are shown in a prompt dialog rather than failing silently.

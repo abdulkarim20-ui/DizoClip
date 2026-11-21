@@ -3,6 +3,7 @@ import datetime
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, QUrl
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPainter
 from PySide6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -28,7 +29,13 @@ from app.components.labels.animated_tooltip import attach_tooltip, set_tooltip
 from app.config.sections import SECTION_DEFINITIONS
 from app.config.theme import ACCENT, CARD_BORDER, FONT_MONO, TEXT_DIM, TEXT_MAIN, font_css
 from app.core.data_manager import DataError
-from app.core.export_import import ExportError
+from app.core.export_import import (
+    MAX_IMPORT_BYTES,
+    ExportError,
+    WrongPassphrase,
+    is_encrypted_bundle,
+    read_bundle,
+)
 from app.core.icons import render_pixmap
 from app.sections.registry import SECTION_REGISTRY
 
@@ -439,10 +446,10 @@ class SettingsView(QWidget):
             "Data Folder", "Open the folder where DizoClip stores your data",
             "Open", self._on_open_folder_clicked))
         body_lay.addWidget(self._action_card(
-            "Export Data", "Save everything to a passphrase-protected file",
+            "Export Data", "Choose what to share, as encrypted or plain JSON",
             "Export", self._on_export_clicked))
         body_lay.addWidget(self._action_card(
-            "Import Data", "Add items from an export file (nothing is deleted)",
+            "Import Data", "Preview a file, then add only what you want",
             "Import", self._on_import_clicked))
 
         # 5. Section: About
@@ -590,38 +597,62 @@ class SettingsView(QWidget):
         return text if ok and text else None
 
     def _on_export_clicked(self):
-        pw = self._ask_passphrase("Export data", "Choose a passphrase (8+ characters).\n"
-                                  "Anyone with the file AND the passphrase can read your keys:")
-        if not pw:
-            return
-        if pw != self._ask_passphrase("Export data", "Type the passphrase again:"):
-            QMessageBox.warning(self, "DizoClip", "The passphrases did not match.")
-            return
-        default = f"DizoClip-export-{datetime.date.today():%Y-%m-%d}.dizoclip"
-        path, _ = QFileDialog.getSaveFileName(self, "Export DizoClip data", default, "DizoClip export (*.dizoclip)")
-        if not path:
-            return
-        try:
-            self.win.export_data(path, pw)
-        except (ExportError, OSError) as exc:
-            QMessageBox.critical(self, "DizoClip", f"Export failed:\n\n{exc}")
-            return
-        QMessageBox.information(self, "DizoClip", "Export saved. Keep the file and the passphrase safe.")
+        from app.components.dialogs.export_dialog import ExportDialog
+        ExportDialog(self.win).exec()
 
     def _on_import_clicked(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import DizoClip data", "", "DizoClip export (*.dizoclip)")
+        import os
+        from app.components.dialogs.import_dialog import ImportDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import DizoClip data",
+            "",
+            "DizoClip export (*.dizoclip *.json);;All files (*)",
+        )
         if not path:
             return
-        pw = self._ask_passphrase("Import data", "Passphrase for this file:")
-        if not pw:
-            return
+
         try:
-            added = self.win.import_data(path, pw)
+            if os.path.getsize(path) > MAX_IMPORT_BYTES:
+                raise ExportError("This file is too large to be a DizoClip export.")
+            with open(path, "rb") as fh:
+                blob = fh.read()
+
+            payload = None
+            if is_encrypted_bundle(blob):
+                while payload is None:  # wrong passphrase -> ask again, Cancel leaves
+                    pw = self._ask_passphrase("Import data", "Passphrase for this file:")
+                    if not pw:
+                        return
+                    try:
+                        payload = read_bundle(blob, pw)
+                    except WrongPassphrase as exc:
+                        QMessageBox.warning(self, "DizoClip", str(exc))
+            else:
+                payload = read_bundle(blob)
+
+            plan = self.win.plan_import(payload)
         except (ExportError, OSError) as exc:
             QMessageBox.critical(self, "DizoClip", f"Import failed:\n\n{exc}")
             return
+
+        if not plan.items:
+            QMessageBox.information(self, "DizoClip", "This file has nothing to import.")
+            return
+
+        dlg = ImportDialog(self.win, plan, os.path.basename(path))
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        try:
+            added = self.win.import_selected(plan, dlg.chosen_indexes())
+        except DataError as exc:
+            QMessageBox.critical(self, "DizoClip", f"Import could not be saved. Nothing was added.\n\n{exc}")
+            return
+
         total = sum(added.values())
-        QMessageBox.information(self, "DizoClip", f"Imported {total} new item(s). Existing items were not changed.")
+        QMessageBox.information(self, "DizoClip", f"Imported {total} item(s). Existing items were not changed.")
 
     def refresh_nav_tabs(self):
         """Rebuilds navigation tab buttons according to section_order and enabled_sections."""

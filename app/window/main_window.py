@@ -32,13 +32,15 @@ from app.config.constants import (
 from app.config.paths import ASSETS_DIR
 from app.config.theme import BG_MAIN, TEXT_MAIN
 from app.core.clipboard import ClipboardGuard, copy_to_clipboard
+from app import __version__
 from app.core.export_import import (
     EXPORT_DATASETS,
-    build_bundle,
-    clean_for_export,
-    clean_incoming,
-    merge_into,
-    open_bundle,
+    ExportStats,
+    ImportPlan,
+    apply_plan,
+    export_to_file,
+    plan_import,
+    read_bundle,
 )
 from app.core.icons import IconManager
 from app.core.data_manager import DataError, DataManager
@@ -556,21 +558,62 @@ class MainWindow(QMainWindow):
     def confirm_delete_command(self, cmd_item):
         self._confirm_delete(self.commands, cmd_item, cmd_item.get("title", "Command"), self.save_commands)
 
-    def export_data(self, path: str, passphrase: str) -> None:
-        payload = {name: clean_for_export(name, getattr(self, name)) for name in EXPORT_DATASETS}
-        Path(path).write_bytes(build_bundle(payload, passphrase))
+    # ------------------------------------------------------------ export / import
+    def _dataset_lists(self) -> dict:
+        return {name: getattr(self, name) for name in EXPORT_DATASETS}
 
-    def import_data(self, path: str, passphrase: str) -> dict:
-        """Merge an export into the current data. Returns {dataset: number_added}."""
-        payload = open_bundle(Path(path).read_bytes(), passphrase)  # raises ExportError
-        added = {}
-        for name in EXPORT_DATASETS:
-            incoming = clean_incoming(name, payload.get(name))
-            added[name] = merge_into(getattr(self, name), incoming)
-        # save() backs up each file first, so an import can be undone from Restore.
-        self.data_manager.save_all({name: getattr(self, name) for name in EXPORT_DATASETS})
-        self.show_list_view()
+    def export_selected(
+        self,
+        path: str,
+        selection: dict,
+        *,
+        passphrase: str | None = None,
+        plain: bool = False,
+        include_secrets: bool = True,
+    ) -> ExportStats:
+        """Export only the chosen records. Raises ExportError / OSError; the UI reports them."""
+        return export_to_file(
+            path,
+            selection,
+            passphrase=passphrase,
+            plain=plain,
+            include_secrets=include_secrets,
+            app_version=__version__,
+        )
+
+    def export_data(self, path: str, passphrase: str) -> None:
+        """Export everything, encrypted (the original one-call API)."""
+        self.export_selected(path, self._dataset_lists(), passphrase=passphrase)
+
+    def plan_import(self, payload: dict) -> ImportPlan:
+        """Compare an export with the current data. Changes nothing."""
+        return plan_import(self._dataset_lists(), payload)
+
+    def import_selected(self, plan: ImportPlan, chosen=None) -> dict:
+        """
+        Add the chosen items (chosen=None means every NEW item). Returns {dataset: number_added}.
+        Disk first, memory second: if saving fails nothing in memory changes, and the
+        screen never shows items that are not stored.
+        save() backs up each file first, so an import can always be undone from Settings > Restore.
+        """
+        new_lists, added = apply_plan(plan, self._dataset_lists(), chosen)
+        if sum(added.values()):
+            try:
+                self.data_manager.save_all({n: new_lists[n] for n, c in added.items() if c})
+            except DataError:
+                log.exception("Import could not be saved")
+                self.reload_data()  # make the screen match what is really on disk
+                raise
+            for name, count in added.items():
+                if count:
+                    getattr(self, name)[:] = new_lists[name]  # in place: other views keep their reference
+            self.show_list_view()
         return added
+
+    def import_data(self, path: str, passphrase: str | None = None) -> dict:
+        """Merge an export file (either format) into the current data. Returns {dataset: number_added}."""
+        payload = read_bundle(Path(path).read_bytes(), passphrase)  # raises ExportError
+        return self.import_selected(self.plan_import(payload))
 
     def rewrite_all_datasets(self) -> None:
         """Re-save prompts, commands and AI models (used when the encryption setting changes)."""
