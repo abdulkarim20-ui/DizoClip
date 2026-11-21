@@ -11,9 +11,6 @@ import json
 import os
 from typing import Any
 
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-
 MAGIC = "dizoclip-export"
 FORMAT_VERSION = 1
 EXPORT_DATASETS = ("keys", "prompts", "ai_models", "links", "commands")
@@ -26,11 +23,15 @@ class ExportError(RuntimeError):
 
 
 def _key(passphrase: str, salt: bytes, n: int, r: int, p: int) -> bytes:
+    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
     kdf = Scrypt(salt=salt, length=32, n=n, r=r, p=p)
     return base64.urlsafe_b64encode(kdf.derive(passphrase.encode("utf-8")))
 
 
 def build_bundle(datasets: dict[str, Any], passphrase: str) -> bytes:
+    from cryptography.fernet import Fernet
+
     if len(passphrase) < MIN_PASSPHRASE:
         raise ExportError(f"Use a passphrase with at least {MIN_PASSPHRASE} characters.")
     salt = os.urandom(16)
@@ -48,6 +49,8 @@ def build_bundle(datasets: dict[str, Any], passphrase: str) -> bytes:
 
 
 def open_bundle(blob: bytes, passphrase: str) -> dict[str, Any]:
+    from cryptography.fernet import Fernet, InvalidToken
+
     try:
         env = json.loads(blob.decode("utf-8"))
         if env.get("magic") != MAGIC or env.get("version") != FORMAT_VERSION:

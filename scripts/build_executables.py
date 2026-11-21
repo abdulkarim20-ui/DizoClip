@@ -45,6 +45,16 @@ def find_iscc() -> Path | None:
     return None
 
 
+def find_compat_binaries() -> list[Path]:
+    """Find python3t.dll or other compat DLLs required by free-threaded Python on Windows."""
+    python_dir = Path(sys.executable).parent
+    candidates = [
+        python_dir / "abi3t-compat" / "python3t.dll",
+        python_dir / "python3t.dll",
+    ]
+    return [p for p in candidates if p.is_file()]
+
+
 def run_pyinstaller() -> Path:
     """Compile the single standalone executable with PyInstaller."""
     print("=" * 60)
@@ -58,14 +68,19 @@ def run_pyinstaller() -> Path:
         "--clean",
         "--noconsole",
         "--onefile",
+        "--collect-all",
+        "cryptography",
         "--name",
         "DizoClip",
         "--icon",
         str(ICON_PATH),
         "--add-data",
         f"{ASSETS_DIR};assets",
-        str(ROOT_DIR / "main.py"),
     ]
+    for binary in find_compat_binaries():
+        cmd.extend(["--add-binary", f"{binary};."])
+    cmd.append(str(ROOT_DIR / "main.py"))
+
     print("Running:", " ".join(cmd))
     res = subprocess.run(cmd, cwd=str(ROOT_DIR))
     if res.returncode != 0:
