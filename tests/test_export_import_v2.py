@@ -632,3 +632,37 @@ def test_export_dialog_writes_an_encrypted_file_with_only_the_ticked_items(
         stub_ui["boxes"][-1][0] == "information"
         and "Exported 2" in stub_ui["boxes"][-1][1]
     )
+
+
+def test_import_dialog_dimensions_and_collapsed_by_default(win):
+    from app.components.dialogs.import_dialog import ImportDialog
+
+    win.prompts.extend([prompt(1), prompt(2, "old")])
+    plan = ei.plan_import(
+        {"prompts": win.prompts, "links": []},
+        {"prompts": [prompt(1), prompt(2, "edited"), prompt(3)], "links": [link(1)]},
+    )
+    d = ImportDialog(win, plan, "file.dizoclip")
+    assert d.width() == 360 and d.height() == 405
+    for i in range(d.tree.topLevelItemCount()):
+        top = d.tree.topLevelItem(i)
+        assert not top.isExpanded()  # collapsed by default
+
+
+def test_password_prompt_dialog_eye_toggle_and_dimensions(win):
+    from PySide6.QtWidgets import QLineEdit
+    from app.components.dialogs.password_dialog import PasswordPromptDialog
+
+    dlg = PasswordPromptDialog(win, "Import data", "Password for this file:")
+    assert dlg.width() == 330 and dlg.height() == 145
+    assert "Import data - DizoClip" in dlg.windowTitle()
+    assert dlg.pw_input.echoMode() == QLineEdit.Password
+
+    # Trigger eye action to reveal
+    dlg._toggle_action.trigger()
+    assert dlg.pw_input.echoMode() == QLineEdit.Normal
+
+    # Trigger eye action to mask again
+    dlg._toggle_action.trigger()
+    assert dlg.pw_input.echoMode() == QLineEdit.Password
+

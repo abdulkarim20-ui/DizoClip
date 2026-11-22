@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.components.dialogs.message_dialog import show_message
 from app.components.inputs.check_style import GroupChecks, check_qss
 from app.config.theme import (
     ACCENT,
@@ -319,7 +320,7 @@ class ExportDialog(QDialog):
         except (ExportError, OSError) as exc:
             self._busy = False
             self._refresh()
-            QMessageBox.critical(self, "DizoClip", f"Export failed:\n\n{exc}")
+            show_message(self, "critical", "DizoClip", f"Export failed:\n\n{exc}")
             return
 
         msg = f"Exported {stats.total} item(s)."
@@ -327,5 +328,5 @@ class ExportDialog(QDialog):
             msg += (f"\n\n{stats.skipped_locked} locked item(s) were skipped "
                     "(encrypted for a different Windows account).")
         msg += "\n\nKeep the file and the password safe."
-        QMessageBox.information(self, "DizoClip", msg)
+        show_message(self, "information", "DizoClip", msg)
         self.accept()

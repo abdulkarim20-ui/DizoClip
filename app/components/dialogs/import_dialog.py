@@ -39,7 +39,7 @@ _STATUS = {
 
 
 class ImportDialog(QDialog):
-    WIDTH, HEIGHT = 340, 500
+    WIDTH, HEIGHT = 360, 405
 
     def __init__(self, win, plan: ImportPlan, source_name: str = ""):
         super().__init__(win)
@@ -55,8 +55,8 @@ class ImportDialog(QDialog):
         """)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 16)
-        root.setSpacing(8)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(7)
 
         title = QLabel("Import")
         title.setStyleSheet("font-size: 15px; font-weight: 700; color: #ffffff;")
@@ -183,7 +183,7 @@ class ImportDialog(QDialog):
                 else:
                     child.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
                     child.setCheckState(0, Qt.Checked if inc.status == NEW else Qt.Unchecked)
-            top.setExpanded(actionable)
+            top.setExpanded(False)
         self.tree.blockSignals(False)
 
     def chosen_indexes(self) -> set[int]:

@@ -569,8 +569,8 @@ class SettingsView(QWidget):
         self.win.save_settings()
 
     def _ask_passphrase(self, title: str, label: str):
-        text, ok = QInputDialog.getText(self, title, label, QLineEdit.Password)
-        return text if ok and text else None
+        from app.components.dialogs.password_dialog import PasswordPromptDialog
+        return PasswordPromptDialog.get_password(self, title, label)
 
     # Alias for newer naming while preserving backwards compatibility in fixtures & tests
     _ask_password = _ask_passphrase
@@ -582,6 +582,7 @@ class SettingsView(QWidget):
     def _on_import_clicked(self):
         import os
         from app.components.dialogs.import_dialog import ImportDialog
+        from app.components.dialogs.message_dialog import show_message
 
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -607,15 +608,15 @@ class SettingsView(QWidget):
                 try:
                     payload = read_bundle(blob, pw)
                 except WrongPassphrase as exc:
-                    QMessageBox.warning(self, "DizoClip", str(exc))
+                    show_message(self, "warning", "DizoClip", str(exc))
 
             plan = self.win.plan_import(payload)
         except (ExportError, OSError) as exc:
-            QMessageBox.critical(self, "DizoClip", f"Import failed:\n\n{exc}")
+            show_message(self, "critical", "DizoClip", f"Import failed:\n\n{exc}")
             return
 
         if not plan.items:
-            QMessageBox.information(self, "DizoClip", "This file has nothing to import.")
+            show_message(self, "information", "DizoClip", "This file has nothing to import.")
             return
 
         dlg = ImportDialog(self.win, plan, os.path.basename(path))
@@ -625,11 +626,11 @@ class SettingsView(QWidget):
         try:
             added = self.win.import_selected(plan, dlg.chosen_indexes())
         except DataError as exc:
-            QMessageBox.critical(self, "DizoClip", f"Import could not be saved. Nothing was added.\n\n{exc}")
+            show_message(self, "critical", "DizoClip", f"Import could not be saved. Nothing was added.\n\n{exc}")
             return
 
         total = sum(added.values())
-        QMessageBox.information(self, "DizoClip", f"Imported {total} item(s). Existing items were not changed.")
+        show_message(self, "information", "DizoClip", f"Imported {total} item(s). Existing items were not changed.")
 
     def refresh_nav_tabs(self):
         """Rebuilds navigation tab buttons according to section_order and enabled_sections."""
