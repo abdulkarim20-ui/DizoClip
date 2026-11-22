@@ -572,6 +572,9 @@ class SettingsView(QWidget):
         text, ok = QInputDialog.getText(self, title, label, QLineEdit.Password)
         return text if ok and text else None
 
+    # Alias for newer naming while preserving backwards compatibility in fixtures & tests
+    _ask_password = _ask_passphrase
+
     def _on_export_clicked(self):
         from app.components.dialogs.export_dialog import ExportDialog
         ExportDialog(self.win).exec()
@@ -595,10 +598,10 @@ class SettingsView(QWidget):
             with open(path, "rb") as fh:
                 blob = fh.read()
 
-            require_encrypted_bundle(blob)  # rejects .json / .env before asking for a passphrase
+            require_encrypted_bundle(blob)  # rejects .json / .env before asking for a password
             payload = None
-            while payload is None:  # wrong passphrase -> ask again, Cancel leaves
-                pw = self._ask_passphrase("Import data", "Passphrase for this file:")
+            while payload is None:  # wrong password -> ask again, Cancel leaves
+                pw = self._ask_passphrase("Import data", "Password for this file:")
                 if not pw:
                     return
                 try:

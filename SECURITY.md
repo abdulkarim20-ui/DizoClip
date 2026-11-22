@@ -55,15 +55,15 @@ All sensitive data (API keys, secrets) is encrypted using **Windows Data Protect
 
 | Data Type | Encrypted? | Protected Location |
 | :--- | :---: | :--- |
-| API Keys & Secrets | ✅ Yes (always) | `User_Data/DC_Keys.json` |
-| Prompts (text) | ✅ Yes (default) | `User_Data/DC_Prompts.json` |
-| Code Snippets / Models | ✅ Yes (default) | `User_Data/DC_AI_Models.json` |
-| Terminal Commands | ✅ Yes (default) | `User_Data/DC_Commands.json` |
-| Links | ❌ No | `User_Data/DC_Links.json` |
-| Settings | ❌ No | `User_Data/DC_Settings.json` |
-| Custom Colors | ❌ No | `User_Data/DC_Custom_Colors.json` |
+| API Keys & Secrets | ✅ Yes (Windows DPAPI) | `User_Data/DC_Keys.json` |
+| Prompts (text) | ❌ No (Plain JSON for Git tracking) | `User_Data/DC_Prompts.json` |
+| Code Snippets / Models | ❌ No (Plain JSON for Git tracking) | `User_Data/DC_AI_Models.json` |
+| Terminal Commands | ❌ No (Plain JSON for Git tracking) | `User_Data/DC_Commands.json` |
+| Links | ❌ No (Plain JSON) | `User_Data/DC_Links.json` |
+| Settings | ❌ No (Plain JSON) | `User_Data/DC_Settings.json` |
+| Custom Colors | ❌ No (Plain JSON) | `User_Data/DC_Custom_Colors.json` |
 
-Prompts, commands, and snippets are protected on disk when **Encrypt All Data** is enabled in Settings (on by default). Before reinstalling Windows or migrating PCs, use **Settings → Data → Export Data** to create a passphrase-protected backup.
+API keys and secrets are strictly protected on disk using Windows DPAPI. Prompts, commands, and snippets are stored as transparent, readable JSON so you can version-control, inspect, and diff them in Git without friction. Before reinstalling Windows or migrating PCs, use **Settings → Data → Export Data (.dizoclip)** to create a password-protected backup.
 - **Sensitive content in prompts? Use the API Keys module instead**
 
 ---
@@ -274,10 +274,10 @@ DizoClip is a local developer tool and has not been independently audited.
 **A:** Encrypted at rest with Windows DPAPI. There is no sync, so end-to-end encryption does not apply.
 
 ### Q: Can I access my encrypted keys from another computer?
-**A:** DPAPI keys are bound to your Windows account. To transfer data to another computer, use **Settings → Data → Export Data** to create a passphrase-protected encrypted `.dizoclip` bundle, then import it on the new machine.
+**A:** DPAPI keys are bound to your Windows account. To transfer data to another computer, use **Settings → Data → Export Data (.dizoclip)** to create a password-protected encrypted `.dizoclip` bundle, then import it on the new machine.
 
 ### Q: What if I forget my Windows password?
-**A:** Unfortunately, you cannot decrypt DPAPI data without your Windows user credentials. Create a passphrase-protected export before reinstalling or resetting your account.
+**A:** Unfortunately, you cannot decrypt DPAPI data without your Windows user credentials. Create a password-protected export before reinstalling or resetting your account.
 
 ### Q: Is the source code auditable?
 **A:** Yes! DizoClip is open-source. You can review the security implementation in `app/core/security.py` and `app/core/data_manager.py`.

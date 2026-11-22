@@ -44,7 +44,7 @@ Developers constantly suffer from **context switching**:
 | **Bookmark Hell** | Consolidated quick links hub with direct browser launch |
 | **Forgotten Commands** | Terminal command library with instant copy |
 | **Clipboard History Leaks** | **Clipboard Guard**: Exemption from Windows History (`Win+V`) and optional 30-second auto-clear |
-| **Cross-PC Migration** | **Selective `.dizoclip` Archives**: Passphrase-encrypted Scrypt + AES-128 export with pre-import diff preview |
+| **Cross-PC Migration** | **Selective `.dizoclip` Archives**: Password-encrypted Scrypt + AES-128 export with pre-import diff preview |
 | **Bloated Desktop Utilities** | **Blazing Native Speed**: Zero-lag DWM launch, lazy widget loading, and ultra-lean memory (~35–45 MB) |
 | **Privacy Concerns** | **100% Offline & Local**: No cloud sync, no accounts, no telemetry. Your data never leaves your device. |
 
@@ -202,12 +202,12 @@ Keep your Docker commands, Git recipes, Kubernetes manifests, and database queri
 
 ---
 
-### 📦 6. Passphrase-Protected Selective Export & Import (`.dizoclip`)
+### 📦 6. Password-Protected Selective Export & Import (`.dizoclip`)
 
 Safely backup or migrate your data across devices with single-format, military-grade encrypted archives and selective item control.
 
 **What it does:**
-- ✅ **Single Secure Container Format (`.dizoclip`)**: Encrypted using Fernet AES-128 with keys derived via Scrypt (`n=2^14, r=8, p=1`) from your passphrase + 16-byte cryptographic salt
+- ✅ **Single Secure Container Format (`.dizoclip`)**: Encrypted using Fernet AES-128 with keys derived via Scrypt (`n=2^14, r=8, p=1`) from your password + 16-byte cryptographic salt
 - ✅ **Selective Tree Checklist**: Export exactly what you need—choose entire modules or pick individual keys, prompts, models, links, and commands with category badges and item counters
 - ✅ **Non-Destructive Import Preview**: Inspect incoming archives before anything is touched. The preview categorizes items into **New** (green), **Matched** (identical, skipped or updated), and **Changed** (conflicts)
 - ✅ **Cross-Machine Portability**: Safely move secrets across different Windows user accounts and PCs without exposing plaintext keys
@@ -254,7 +254,9 @@ Tailor DizoClip to your exact workflow and desktop setup.
 - Match cards to official brand colors (e.g., Anthropic orange, OpenAI teal, Docker blue, GitHub purple)
 
 <div align="center">
-  <img src="docs/screenshots/07_settings.png" alt="Settings & Customization" width="480" />
+  <img src="docs/screenshots/07_settings_A.png" alt="Settings - Preferences & Modules" width="480" />
+  <br/><br/>
+  <img src="docs/screenshots/07_settings_B.png" alt="Settings - Data & Storage" width="480" />
 </div>
 
 ---
@@ -275,7 +277,7 @@ First-time launch includes a clean onboarding tour introducing DizoClip's local-
   <img src="docs/screenshots/09_export_dialog.png" alt="Selective Export Dialog" width="520" />
 </div>
 
-Granular checklist tree allows exporting specific modules or individual items with real-time selection counts and passphrase protection.
+Granular checklist tree allows exporting specific modules or individual items with real-time selection counts and password protection.
 
 ### Import Preview & Comparison
 
@@ -350,7 +352,7 @@ Secret Key → Windows DPAPI CryptProtectData → User SID Encryption → DC_Key
 
 #### 📦 Scrypt + AES-128 Encrypted Archives (`.dizoclip`)
 ```
-Passphrase + 16-byte Salt → Scrypt (n=16384, r=8, p=1) → 256-bit Key → Fernet AES-128 CBC → .dizoclip
+Password + 16-byte Salt → Scrypt (n=16384, r=8, p=1) → 256-bit Key → Fernet AES-128 CBC → .dizoclip
 ```
 - Single standard export format eliminates plaintext leaks
 - Protects your data in transit when migrating across devices or backing up to external drives
@@ -397,7 +399,7 @@ DizoClip automatically adapts to your operating environment:
 | `DC_AI_Models.json` | Plain JSON | None (Human-readable UTF-8) | Multi-language code snippets (Python, Node, Shell, LangChain) |
 | `settings.json` | Plain JSON | None (Human-readable UTF-8) | User preferences, active tab, module visibility, theme settings |
 | `Backups/` | JSON | Matches source dataset encryption | Automated timestamped pre-save snapshots for disaster recovery |
-| `*.dizoclip` | Container | **Fernet AES-128 + Scrypt** | Passphrase-protected selective export archive |
+| `*.dizoclip` | Container | **Fernet AES-128 + Scrypt** | Password-protected selective export archive |
 
 ---
 

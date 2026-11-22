@@ -143,8 +143,8 @@ class ExportDialog(QDialog):
         root.addWidget(self.tree, 1)
 
         self.hint = QLabel(
-            "Protected with your passphrase. Opens only in DizoClip. "
-            "A forgotten passphrase can't be recovered."
+            "Protected with your password. Opens only in DizoClip. "
+            "A forgotten password can't be recovered."
         )
         self.hint.setWordWrap(True)
         self.hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
@@ -152,10 +152,10 @@ class ExportDialog(QDialog):
 
         self.pw1 = QLineEdit()
         self.pw1.setEchoMode(QLineEdit.Password)
-        self.pw1.setPlaceholderText(f"Passphrase ({MIN_PASSPHRASE}+ characters)")
+        self.pw1.setPlaceholderText(f"Password ({MIN_PASSPHRASE}+ characters)")
         self.pw2 = QLineEdit()
         self.pw2.setEchoMode(QLineEdit.Password)
-        self.pw2.setPlaceholderText("Repeat passphrase")
+        self.pw2.setPlaceholderText("Repeat password")
         root.addWidget(self.pw1)
         root.addWidget(self.pw2)
 
@@ -264,7 +264,7 @@ class ExportDialog(QDialog):
         if a and len(a) < MIN_PASSPHRASE:
             error = f"Use at least {MIN_PASSPHRASE} characters."
         elif b and a != b:
-            error = "The passphrases don't match."
+            error = "The passwords don't match."
         self.pw_error.setText(error)
         self.pw_error.setVisible(bool(error))
 
@@ -298,6 +298,6 @@ class ExportDialog(QDialog):
         if stats.skipped_locked:
             msg += (f"\n\n{stats.skipped_locked} locked item(s) were skipped "
                     "(encrypted for a different Windows account).")
-        msg += "\n\nKeep the file and the passphrase safe."
+        msg += "\n\nKeep the file and the password safe."
         QMessageBox.information(self, "DizoClip", msg)
         self.accept()

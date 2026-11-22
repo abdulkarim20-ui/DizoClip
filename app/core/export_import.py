@@ -42,6 +42,7 @@ DATASET_LABELS = {
     "commands": "Commands",
 }
 MIN_PASSPHRASE = 8
+MIN_PASSWORD = MIN_PASSPHRASE
 MAX_IMPORT_BYTES = 25 * 1024 * 1024  # a real export is a few KB; this only stops accidents
 _N, _R, _P = 2**15, 8, 1
 
@@ -65,6 +66,9 @@ class WrongPassphrase(ExportError):
     """Subclass of ExportError so existing `except ExportError` code keeps working."""
 
 
+WrongPassword = WrongPassphrase
+
+
 # ----------------------------------------------------------------------------- encryption
 def _key(passphrase: str, salt: bytes, n: int, r: int, p: int) -> bytes:
     from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -77,7 +81,7 @@ def build_bundle(datasets: dict[str, Any], passphrase: str) -> bytes:
     from cryptography.fernet import Fernet
 
     if len(passphrase) < MIN_PASSPHRASE:
-        raise ExportError(f"Use a passphrase with at least {MIN_PASSPHRASE} characters.")
+        raise ExportError(f"Use a password with at least {MIN_PASSPHRASE} characters.")
     salt = os.urandom(16)
     token = Fernet(_key(passphrase, salt, _N, _R, _P)).encrypt(
         json.dumps(datasets, ensure_ascii=False).encode("utf-8")
@@ -111,7 +115,7 @@ def open_bundle(blob: bytes, passphrase: str) -> dict[str, Any]:
     try:
         plain = Fernet(_key(passphrase, salt, n, r, p)).decrypt(token)
     except InvalidToken as exc:
-        raise WrongPassphrase("Wrong passphrase, or the file is damaged.") from exc
+        raise WrongPassphrase("Incorrect password, or the file is damaged.") from exc
     try:
         data = json.loads(plain.decode("utf-8"))
     except ValueError as exc:
@@ -314,7 +318,7 @@ def read_bundle(blob: bytes, passphrase: str | None = None) -> dict[str, Any]:
     """Return the {dataset: [records]} mapping from an encrypted .dizoclip file."""
     require_encrypted_bundle(blob)
     if not passphrase:
-        raise WrongPassphrase("This file needs a passphrase.")
+        raise WrongPassphrase("This file needs a password.")
     return open_bundle(blob, passphrase)
 
 
