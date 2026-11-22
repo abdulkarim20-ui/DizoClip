@@ -221,9 +221,11 @@ Safely backup or migrate your data across devices with single-format, military-g
 - Move your entire developer workbench to a new laptop with a single password-protected file
 - Never wonder what an import will overwrite thanks to the real-time visual comparison preview
 
-<div align="center">
+<p align="center">
   <img src="docs/screenshots/08_Export_view.png" alt="Selective Export Dialog" width="360" />
-</div>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/09_Import_view.png" alt="Import Preview Dialog" width="360" />
+</p>
 
 ---
 
@@ -270,13 +272,15 @@ Tailor DizoClip to your exact workflow and desktop setup.
 
 First-time launch includes a clean onboarding tour introducing DizoClip's local-first philosophy and core features.
 
-### Selective Export Dialog
+### Selective Export & Import Dialogs
 
-<div align="center">
+<p align="center">
   <img src="docs/screenshots/08_Export_view.png" alt="Selective Export Dialog" width="360" />
-</div>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/09_Import_view.png" alt="Import Preview Dialog" width="360" />
+</p>
 
-Granular checklist tree allows exporting specific modules or individual items with real-time selection counts, automatic empty-module filtering, and single-field password encryption with show/hide reveal toggle.
+Export exactly what you need with granular checklist filtering and single-password encryption with show/hide reveal (left), or preview incoming archives before merging with smart New/Matched/Changed status badges and collapsed categories (right).
 
 ### Custom Color Picker & Brand Colors
 
