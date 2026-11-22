@@ -228,15 +228,15 @@ class ExportDialog(QDialog):
 
     def _fill_tree(self) -> None:
         self.tree.blockSignals(True)
+        has_any_items = False
         for name in EXPORT_DATASETS:
             items = list(getattr(self.win, name))
+            if not items:
+                continue
+            has_any_items = True
             label = DATASET_LABELS[name]
             top = QTreeWidgetItem(self.tree, [f"{label} · {len(items)}"])
             top.setData(0, Qt.UserRole, name)
-            if not items:
-                top.setFlags(Qt.ItemIsEnabled)
-                top.setForeground(0, QColor(TEXT_DIM))
-                continue
             top.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
             top.setCheckState(0, Qt.Checked)
             for rec in items:
@@ -253,6 +253,12 @@ class ExportDialog(QDialog):
                     child.setData(0, Qt.UserRole, len(self._entries))
                     self._entries.append((name, rec))
             top.setExpanded(False)
+
+        if not has_any_items:
+            empty_item = QTreeWidgetItem(self.tree, ["No items saved yet to export"])
+            empty_item.setFlags(Qt.ItemIsEnabled)
+            empty_item.setForeground(0, QColor(TEXT_DIM))
+
         self.tree.blockSignals(False)
 
     def _checked_indexes(self) -> list[int]:

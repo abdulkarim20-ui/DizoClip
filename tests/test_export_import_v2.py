@@ -424,6 +424,19 @@ def test_export_dialog_locked_items_cannot_be_ticked(win):
     assert d.count_lbl.text() == "1 of 1 selected"
 
 
+def test_export_dialog_hides_empty_sections(win):
+    from app.components.dialogs.export_dialog import ExportDialog
+
+    d_empty = ExportDialog(win)
+    assert d_empty.tree.topLevelItemCount() == 1
+    assert "No items" in d_empty.tree.topLevelItem(0).text(0)
+
+    win.keys.append({"label": "A", "full_key": "k"})
+    d = ExportDialog(win)
+    assert d.tree.topLevelItemCount() == 1
+    assert d.tree.topLevelItem(0).text(0).startswith("API Keys")
+
+
 def test_export_dialog_rules_for_passphrase(win):
     from PySide6.QtWidgets import QLineEdit
     from app.components.dialogs.export_dialog import ExportDialog
