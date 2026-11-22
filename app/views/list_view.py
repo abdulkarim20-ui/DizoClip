@@ -553,38 +553,29 @@ class ListView(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setAlignment(Qt.AlignCenter)
 
-        add_btn = QPushButton()
+        add_btn = QToolButton()
+        add_btn.setText(f" {meta['add_btn_text']}")
         add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setFixedHeight(34)
-        add_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {ACCENT};
-                border-radius: 8px;
-                border: none;
-            }}
-            QPushButton:hover {{ background: #d5693c; }}
-            QPushButton:pressed {{ background: #b85a30; }}
-        """)
+        add_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
-        btn_lay = QHBoxLayout(add_btn)
-        btn_lay.setContentsMargins(18, 0, 18, 0)
-        btn_lay.setSpacing(6)
-        btn_lay.setAlignment(Qt.AlignCenter)
-
-        ico = QLabel()
         plus_pm = render_pixmap("plus", (12, 12), color="#0b0d10")
         if plus_pm and not plus_pm.isNull():
-            ico.setPixmap(plus_pm)
-            ico.setFixedSize(12, 12)
-        ico.setStyleSheet("background: transparent; border: none;")
-        ico.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        btn_lay.addWidget(ico, 0, Qt.AlignVCenter)
+            add_btn.setIcon(QIcon(plus_pm))
+            add_btn.setIconSize(QSize(12, 12))
 
-        lbl = QLabel(meta["add_btn_text"])
-        lbl.setStyleSheet("color: #0b0d10; font-weight: 700; font-size: 13px; background: transparent; border: none;")
-        lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        btn_lay.addWidget(lbl, 0, Qt.AlignVCenter)
-
+        add_btn.setStyleSheet(f"""
+            QToolButton {{
+                background: {ACCENT};
+                color: #0b0d10;
+                font-weight: 700;
+                font-size: 13px;
+                border-radius: 8px;
+                padding: 8px 20px;
+                border: none;
+            }}
+            QToolButton:hover {{ background: #d5693c; }}
+            QToolButton:pressed {{ background: #b85a30; }}
+        """)
         add_btn.clicked.connect(self._on_add_clicked)
         btn_row.addWidget(add_btn)
         v.addLayout(btn_row)
