@@ -136,8 +136,14 @@ class ImportDialog(QDialog):
         """)
         self.import_btn.clicked.connect(self.accept)
         pm_import = render_padded_pixmap("import", (14, 14), (17, 14), color="#0b0d10", pad_right=3)
+        pm_import_dis = render_padded_pixmap("import", (14, 14), (17, 14), color="#7a6a62", pad_right=3)
+        icon_import = QIcon()
         if pm_import:
-            self.import_btn.setIcon(QIcon(pm_import))
+            icon_import.addPixmap(pm_import, QIcon.Normal, QIcon.Off)
+        if pm_import_dis:
+            icon_import.addPixmap(pm_import_dis, QIcon.Disabled, QIcon.Off)
+        if not icon_import.isNull():
+            self.import_btn.setIcon(icon_import)
             self.import_btn.setIconSize(QSize(17, 14))
         row.addWidget(cancel)
         row.addWidget(self.import_btn)

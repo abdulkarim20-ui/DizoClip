@@ -187,8 +187,14 @@ class ExportDialog(QDialog):
         """)
         self.export_btn.clicked.connect(self._on_export)
         pm_export = render_padded_pixmap("export", (14, 14), (17, 14), color="#0b0d10", pad_right=3)
+        pm_export_dis = render_padded_pixmap("export", (14, 14), (17, 14), color="#7a6a62", pad_right=3)
+        icon_export = QIcon()
         if pm_export:
-            self.export_btn.setIcon(QIcon(pm_export))
+            icon_export.addPixmap(pm_export, QIcon.Normal, QIcon.Off)
+        if pm_export_dis:
+            icon_export.addPixmap(pm_export_dis, QIcon.Disabled, QIcon.Off)
+        if not icon_export.isNull():
+            self.export_btn.setIcon(icon_export)
             self.export_btn.setIconSize(QSize(17, 14))
         row.addWidget(cancel)
         row.addWidget(self.export_btn)
