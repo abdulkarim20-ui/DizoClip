@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QIcon
+from PySide6.QtGui import QAction, QColor, QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -40,7 +40,7 @@ from app.core.export_import import (
     ExportError,
     item_title,
 )
-from app.core.icons import render_padded_pixmap
+from app.core.icons import load_icon, render_padded_pixmap
 from app.core.window_utils import apply_dark_title_bar
 
 TREE_QSS = f"""
@@ -153,11 +153,15 @@ class ExportDialog(QDialog):
         self.pw1 = QLineEdit()
         self.pw1.setEchoMode(QLineEdit.Password)
         self.pw1.setPlaceholderText(f"Password ({MIN_PASSPHRASE}+ characters)")
-        self.pw2 = QLineEdit()
-        self.pw2.setEchoMode(QLineEdit.Password)
-        self.pw2.setPlaceholderText("Repeat password")
+        self.pw1.setFixedHeight(34)
+        self.pw2 = self.pw1  # alias for backwards compatibility
+
+        self._reveal_pw = False
+        self.eye_action = QAction(self)
+        self._update_eye_icon()
+        self.eye_action.triggered.connect(self._toggle_pw_reveal)
+        self.pw1.addAction(self.eye_action, QLineEdit.TrailingPosition)
         root.addWidget(self.pw1)
-        root.addWidget(self.pw2)
 
         self.pw_error = QLabel("")
         self.pw_error.setStyleSheet(f"color: {DANGER}; font-size: 11.5px;")
@@ -205,8 +209,21 @@ class ExportDialog(QDialog):
         self.groups.sync_all()
         self.tree.itemChanged.connect(lambda *_: self._refresh())
         self.pw1.textChanged.connect(lambda *_: self._refresh())
-        self.pw2.textChanged.connect(lambda *_: self._refresh())
         self._refresh()
+
+    def _toggle_pw_reveal(self) -> None:
+        self._reveal_pw = not self._reveal_pw
+        self.pw1.setEchoMode(QLineEdit.Normal if self._reveal_pw else QLineEdit.Password)
+        self._update_eye_icon()
+
+    def _update_eye_icon(self) -> None:
+        name = "eye_closed" if self._reveal_pw else "eye"
+        ic = getattr(self.win, "icons", {}).get(name) if hasattr(self.win, "icons") else None
+        if not ic:
+            ic = load_icon("eye-closed" if self._reveal_pw else "eye", (16, 16), color=TEXT_DIM)
+        if ic:
+            self.eye_action.setIcon(ic)
+        self.eye_action.setToolTip("Hide password" if self._reveal_pw else "Reveal password")
 
     def _fill_tree(self) -> None:
         self.tree.blockSignals(True)
@@ -265,16 +282,14 @@ class ExportDialog(QDialog):
         total = len(self._entries)
         self.count_lbl.setText(f"{len(picked)} of {total} selected")
 
-        a, b = self.pw1.text(), self.pw2.text()
+        a = self.pw1.text()
         error = ""
         if a and len(a) < MIN_PASSPHRASE:
             error = f"Use at least {MIN_PASSPHRASE} characters."
-        elif b and a != b:
-            error = "The passwords don't match."
         self.pw_error.setText(error)
         self.pw_error.setVisible(bool(error))
 
-        ok = bool(picked) and len(a) >= MIN_PASSPHRASE and a == b
+        ok = bool(picked) and len(a) >= MIN_PASSPHRASE
         self.export_btn.setEnabled(ok and not self._busy)
 
     def showEvent(self, event):

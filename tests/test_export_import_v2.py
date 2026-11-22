@@ -425,20 +425,25 @@ def test_export_dialog_locked_items_cannot_be_ticked(win):
 
 
 def test_export_dialog_rules_for_passphrase(win):
+    from PySide6.QtWidgets import QLineEdit
     from app.components.dialogs.export_dialog import ExportDialog
 
     win.keys.append({"label": "A", "full_key": "k"})
     d = ExportDialog(win)
     d.show()
-    assert not d.export_btn.isEnabled()  # no passphrase yet
+    assert not d.export_btn.isEnabled()  # no password yet
     d.pw1.setText("short")
-    d.pw2.setText("short")
     assert not d.export_btn.isEnabled()  # under 8 characters
+    assert "8 characters" in d.pw_error.text()
     d.pw1.setText(PW)
-    d.pw2.setText(PW + "x")
-    assert not d.export_btn.isEnabled() and "match" in d.pw_error.text()
-    d.pw2.setText(PW)
     assert d.export_btn.isEnabled()
+
+    # Test eye reveal toggling
+    assert d.pw1.echoMode() == QLineEdit.Password
+    d.eye_action.trigger()
+    assert d.pw1.echoMode() == QLineEdit.Normal
+    d.eye_action.trigger()
+    assert d.pw1.echoMode() == QLineEdit.Password
 
 
 def test_export_dialog_has_no_plaintext_options(win):
