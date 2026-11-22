@@ -140,14 +140,15 @@ class ExportDialog(QDialog):
         self.tree.setFocusPolicy(Qt.NoFocus)
         self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        root.addWidget(self.tree, 1)
+        self.tree.setFixedHeight(155)
+        root.addWidget(self.tree)
 
         self.hint = QLabel(
-            "Protected with your password. Opens only in DizoClip. "
-            "A forgotten password can't be recovered."
+            "• This password encrypts your file.<br/>"
+            "• You’ll need it to unlock and import in DizoClip."
         )
         self.hint.setWordWrap(True)
-        self.hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11.5px;")
+        self.hint.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px;")
         root.addWidget(self.hint)
 
         self.pw1 = QLineEdit()
