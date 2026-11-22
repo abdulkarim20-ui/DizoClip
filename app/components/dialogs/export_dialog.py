@@ -48,13 +48,13 @@ QTreeWidget {{
     background: {BG_INPUT};
     border: 1px solid {BORDER};
     border-radius: 8px;
-    padding: 4px;
+    padding: 3px;
     outline: none;
     color: {TEXT_MAIN};
 }}
 QTreeWidget::item {{
-    padding: 4px 2px;
-    border-radius: 6px;
+    padding: 2px 2px;
+    border-radius: 4px;
 }}
 QTreeWidget::item:hover {{
     background: #1a1e2b;
@@ -67,7 +67,7 @@ QTreeWidget::item:selected {{
 
 
 class ExportDialog(QDialog):
-    WIDTH, HEIGHT = 360, 450
+    WIDTH, HEIGHT = 360, 405
 
     def __init__(self, win):
         super().__init__(win)
@@ -94,8 +94,8 @@ class ExportDialog(QDialog):
         self._busy = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 16)
-        root.setSpacing(8)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(7)
 
         title = QLabel("Export")
         title.setStyleSheet("font-size: 15px; font-weight: 700; color: #ffffff;")
