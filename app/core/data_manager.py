@@ -274,7 +274,7 @@ class DataManager:
         cfg.setdefault("schema_version", SCHEMA_VERSION)
         cfg.setdefault("welcome_seen", False)
         cfg.setdefault("backup_on_save", True)
-        cfg.setdefault("auto_clear_clipboard", True)
+        cfg.setdefault("auto_clear_clipboard", False)
         cfg["schema_version"] = SCHEMA_VERSION
         return cfg
 

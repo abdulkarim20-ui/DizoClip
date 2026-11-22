@@ -477,7 +477,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ copy
     def _copy_text(self, text: str, btn=None, sensitive: bool = False) -> None:
-        if sensitive and self.settings.get("auto_clear_clipboard", True):
+        if sensitive and self.settings.get("auto_clear_clipboard", False):
             self.clipboard_guard.copy_sensitive(text, CLIPBOARD_CLEAR_SECONDS)
         else:
             QGuiApplication.clipboard().setText(text)

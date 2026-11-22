@@ -265,7 +265,7 @@ class SettingsView(QWidget):
         card_clip, self.sw_clip = self._toggle_card(
             "Auto-Clear Clipboard",
             "Clear copied API keys after 30 seconds",
-            self.win.settings.get("auto_clear_clipboard", True),
+            self.win.settings.get("auto_clear_clipboard", False),
             self._on_toggle_clip,
         )
         body_lay.addWidget(card_clip)
