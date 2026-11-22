@@ -623,6 +623,11 @@ class ListView(QWidget):
         is_prompt = meta["is_prompt"]
 
         self.count.setText(str(len(all_items)))
+        has_items = bool(all_items)
+        if not has_items and self._search_open:
+            self.close_search()
+        self.search_btn.setVisible(has_items)
+
         self.scroll.setVerticalScrollBarPolicy(
             Qt.ScrollBarAsNeeded if len(items) > 3 else Qt.ScrollBarAlwaysOff
         )

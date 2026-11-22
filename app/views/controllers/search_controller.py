@@ -121,6 +121,15 @@ class SearchController(QObject):
 
     def open(self, duration: int = 0, on_finished=None):
         """Directly displays the search input with calculated target width and focuses it."""
+        # Only open if the current section has items
+        meta = getattr(self.list_view, "active_tab", None)
+        if meta and hasattr(self.list_view, "win"):
+            from app.sections.registry import SECTION_REGISTRY
+            sec_meta = SECTION_REGISTRY.get(meta, SECTION_REGISTRY["key-round"])
+            all_items = getattr(self.list_view.win, sec_meta["items_attr"], [])
+            if not all_items:
+                return
+
         self._is_open = True
         target_width = self.calculate_target_width()
 
@@ -181,7 +190,13 @@ class SearchController(QObject):
         was_open = self._is_open
         apply_section_fn(tab_id)
         if was_open:
-            self.open()
+            from app.sections.registry import SECTION_REGISTRY
+            sec_meta = SECTION_REGISTRY.get(tab_id, SECTION_REGISTRY["key-round"])
+            all_items = getattr(self.list_view.win, sec_meta["items_attr"], [])
+            if all_items:
+                self.open()
+            else:
+                self.close(clear_text=True, rebuild=False)
 
     def leave_list_view(self, on_finished=None):
         """Directly closes search when navigating out of list view."""

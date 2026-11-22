@@ -32,7 +32,24 @@ def test_every_section_renders_its_cards_and_search_filters(win, tab):
     win.list_view.select_tab(tab, animate=False)
     win.list_view.rebuild(animate_resize=False)
     assert _card_count(win) == 4
+    assert not win.list_view.search_btn.isHidden()
 
     win.list_view.search.setText("zzz-no-match")
     win.list_view.rebuild(animate_resize=False)
     assert _card_count(win) == 0
+    # Search button still visible because all_items > 0
+    assert not win.list_view.search_btn.isHidden()
+
+
+def test_search_button_hidden_when_section_is_empty(win):
+    win.links.clear()
+    win.list_view.select_tab("link", animate=False)
+    win.list_view.rebuild(animate_resize=False)
+
+    assert win.list_view.search_btn.isHidden() is True
+
+    # Adding an item makes the search button appear
+    win.links.append({"id": "l1", "title": "New", "url": "https://example.com", "color": "#e8794a"})
+    win.list_view.rebuild(animate_resize=False)
+    assert not win.list_view.search_btn.isHidden()
+
