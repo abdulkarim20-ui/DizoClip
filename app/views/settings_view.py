@@ -270,14 +270,6 @@ class SettingsView(QWidget):
         )
         body_lay.addWidget(card_clip)
 
-        card_enc, self.sw_enc = self._toggle_card(
-            "Encrypt All Data",
-            "Protect prompts, commands and snippets",
-            self.win.settings.get("encrypt_all_data", True),
-            self._on_toggle_encrypt,
-        )
-        body_lay.addWidget(card_enc)
-
         # 2. Section: Modules
         sec_mod = QLabel("Modules")
         sec_mod.setStyleSheet(font_css("eyebrow", color="#7a8292", extra="margin-top: 6px; margin-left: 2px;"))
@@ -575,11 +567,6 @@ class SettingsView(QWidget):
     def _on_toggle_clip(self, checked):
         self.win.settings["auto_clear_clipboard"] = checked
         self.win.save_settings()
-
-    def _on_toggle_encrypt(self, checked):
-        self.win.settings["encrypt_all_data"] = checked
-        self.win.save_settings()       # DataManager learns the new value here
-        self.win.rewrite_all_datasets()
 
     def _ask_passphrase(self, title: str, label: str):
         text, ok = QInputDialog.getText(self, title, label, QLineEdit.Password)

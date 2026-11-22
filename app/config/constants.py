@@ -33,7 +33,6 @@ DEFAULT_SETTINGS = {
     "always_on_top": False,
     "confirm_delete": True,
     "auto_clear_clipboard": True,
-    "encrypt_all_data": True,
     "startup_module": "key-round",
     "section_order": ["key-round", "prompt", "ai_model", "link", "command"],
     "enabled_sections": ["key-round", "prompt", "ai_model", "link", "command"],

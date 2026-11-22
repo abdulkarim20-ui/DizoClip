@@ -38,7 +38,6 @@ from app.core.security import (
     SecretProtectionError,
     map_text,
     protect_key_record,
-    protect_text,
     unprotect_key_record,
     unprotect_text,
 )
@@ -97,7 +96,6 @@ class DataManager:
             self.data_dir, keep_recent=backup_count, min_interval=backup_min_interval
         )
         self._fingerprints: dict[str, str] = {}
-        self.encrypt_all = True  # mirrors settings["encrypt_all_data"]
 
     # ------------------------------------------------------------ helpers
     def path_for(self, name: str) -> Path:
@@ -166,21 +164,6 @@ class DataManager:
         self._write_atomic(target, data)
         return data
 
-    def _protect_records(self, name: str, items: list) -> list:
-        fields = ENCRYPTED_FIELDS[name]
-        out = []
-        for rec in items:
-            if not isinstance(rec, dict):
-                out.append(rec)
-                continue
-            clean = {k: v for k, v in rec.items() if not k.startswith("_")}
-            if not rec.get("_decrypt_failed"):  # undecryptable records are written back untouched
-                for field in fields:
-                    if field in clean:
-                        clean[field] = map_text(clean[field], protect_text)
-            out.append(clean)
-        return out
-
     def _unprotect_records(self, name: str, items: list) -> list:
         fields = ENCRYPTED_FIELDS[name]
         out = []
@@ -220,9 +203,22 @@ class DataManager:
 
         if name == "settings":
             data = self._normalize_settings(data)
-            self.encrypt_all = bool(data.get("encrypt_all_data", True))
         elif name in ENCRYPTED_FIELDS:
+            had_encrypted = any(
+                isinstance(rec, dict) and any(
+                    isinstance(rec.get(f), str) and rec[f].startswith("dzc1:")
+                    or (isinstance(rec.get(f), dict) and any(isinstance(v, str) and v.startswith("dzc1:") for v in rec[f].values()))
+                    for f in ENCRYPTED_FIELDS[name]
+                )
+                for rec in data if isinstance(rec, dict)
+            )
             data = self._unprotect_records(name, data)
+            if had_encrypted:
+                try:
+                    self.save(name, data, force=True)
+                    log.info("Migrated %s to plaintext JSON", target.name)
+                except DataError:
+                    log.warning("Could not migrate %s to plaintext", target.name, exc_info=True)
         elif name == "keys":
             needs_migration = any(_key_needs_migration(i) for i in data)
             data = [unprotect_key_record(i) if isinstance(i, dict) else i for i in data]
@@ -279,7 +275,6 @@ class DataManager:
         cfg.setdefault("welcome_seen", False)
         cfg.setdefault("backup_on_save", True)
         cfg.setdefault("auto_clear_clipboard", True)
-        cfg.setdefault("encrypt_all_data", True)
         cfg["schema_version"] = SCHEMA_VERSION
         return cfg
 
@@ -314,14 +309,11 @@ class DataManager:
                 protect_key_record(item) if isinstance(item, dict) else item
                 for item in payload
             ]
-
-        if name == "settings":
+        elif name == "settings":
             payload = self._normalize_settings(payload)
-            self.encrypt_all = bool(payload.get("encrypt_all_data", True))
-        elif name in ENCRYPTED_FIELDS and self.encrypt_all:
-            payload = self._protect_records(name, payload)
         elif name in ENCRYPTED_FIELDS:
-            # encryption off: still never write in-memory-only fields to disk
+            # Prompts, commands, ai_models: saved as clean plain JSON on disk.
+            # In-memory-only fields (e.g. _decrypt_failed) are never written to disk.
             payload = [
                 {k: v for k, v in rec.items() if not k.startswith("_")} if isinstance(rec, dict) else rec
                 for rec in payload
