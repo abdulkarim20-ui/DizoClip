@@ -253,11 +253,11 @@ Tailor DizoClip to your exact workflow and desktop setup.
 - Protect secrets from clipboard sniffers and Windows history logs
 - Match cards to official brand colors (e.g., Anthropic orange, OpenAI teal, Docker blue, GitHub purple)
 
-<div align="center">
-  <img src="docs/screenshots/07_settings_A.png" alt="Settings - Preferences & Modules" width="480" />
-  <br/><br/>
-  <img src="docs/screenshots/07_settings_B.png" alt="Settings - Data & Storage" width="480" />
-</div>
+<p align="center">
+  <img src="docs/screenshots/07_settings_A.png" alt="Settings - Preferences & Modules" width="360" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/07_settings_B.png" alt="Settings - Data & Storage" width="360" />
+</p>
 
 ---
 
