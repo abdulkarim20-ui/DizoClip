@@ -99,7 +99,7 @@ Store, organize, and instantly access your API keys, tokens, and environment var
 - No cloud exposure, no accidental pastes in chat, and no leaking into Windows clipboard history
 
 <div align="center">
-  <img src="docs/screenshots/01_api_keys.png" alt="API Keys Manager" width="480" />
+  <img src="docs/screenshots/01_api_keys.png" alt="API Keys Manager" width="360" />
 </div>
 
 ---
@@ -124,7 +124,7 @@ Build a personal repository of system prompts, instructions, and templates for C
 - Instantly apply tested prompts to new conversations
 
 <div align="center">
-  <img src="docs/screenshots/02_prompts.png" alt="Prompts Library" width="480" />
+  <img src="docs/screenshots/02_prompts.png" alt="Prompts Library" width="360" />
 </div>
 
 ---
@@ -149,7 +149,7 @@ Reference multi-language code examples for initializing and using your favorite 
 - Consistent, tested initialization patterns
 
 <div align="center">
-  <img src="docs/screenshots/03_ai_models.png" alt="AI Models & Snippets" width="480" />
+  <img src="docs/screenshots/03_ai_models.png" alt="AI Models & Snippets" width="360" />
 </div>
 
 ---
@@ -173,7 +173,7 @@ Centralize your most-used dashboards, cloud consoles, documentation, and environ
 - Share links without manually copying from browser
 
 <div align="center">
-  <img src="docs/screenshots/04_quick_links.png" alt="Quick Links Hub" width="480" />
+  <img src="docs/screenshots/04_quick_links.png" alt="Quick Links Hub" width="360" />
 </div>
 
 ---
@@ -197,7 +197,7 @@ Keep your Docker commands, Git recipes, Kubernetes manifests, and database queri
 - Reduce typos and syntax errors in complex CLI operations
 
 <div align="center">
-  <img src="docs/screenshots/05_terminal_commands.png" alt="Terminal Commands" width="480" />
+  <img src="docs/screenshots/05_terminal_commands.png" alt="Terminal Commands" width="360" />
 </div>
 
 ---
@@ -265,7 +265,7 @@ Tailor DizoClip to your exact workflow and desktop setup.
 ### Welcome Onboarding
 
 <div align="center">
-  <img src="docs/screenshots/welcome_dialog.png" alt="Welcome Dialog" width="520" />
+  <img src="docs/screenshots/welcome_dialog.png" alt="Welcome Dialog" width="360" />
 </div>
 
 First-time launch includes a clean onboarding tour introducing DizoClip's local-first philosophy and core features.
@@ -289,7 +289,7 @@ Precision 2D HSV color canvas, rainbow hue slider, RGB/HEX numeric inputs, and s
 ### Add & Edit Forms
 
 <div align="center">
-  <img src="docs/screenshots/06_add_key_form.png" alt="Add/Edit Forms" width="520" />
+  <img src="docs/screenshots/06_add_key_form.png" alt="Add/Edit Forms" width="360" />
 </div>
 
 Intuitive forms with interactive toggles, color pickers, and validation for adding new resources.
