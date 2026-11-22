@@ -208,7 +208,10 @@ Safely backup or migrate your data across devices with single-format, military-g
 
 **What it does:**
 - ✅ **Single Secure Container Format (`.dizoclip`)**: Encrypted using Fernet AES-128 with keys derived via Scrypt (`n=2^14, r=8, p=1`) from your password + 16-byte cryptographic salt
-- ✅ **Selective Tree Checklist**: Export exactly what you need—choose entire modules or pick individual keys, prompts, models, links, and commands with category badges and item counters
+- ✅ **Selective Tree Checklist**: Export exactly what you need—choose entire modules or pick individual keys, prompts, models, links, and commands with category badges and real-time item counters
+- ✅ **Dynamic Empty-Module Filtering**: Sections with 0 items are automatically hidden from the tree view so you only see categories containing data
+- ✅ **Single Password Box with Eye Reveal Toggle (`👁️`)**: Embedded reveal toggle lets you quickly inspect what you typed before exporting—cleaner UI, faster workflow, zero double-typing
+- ✅ **Clear Security Guidelines**: Direct inline guidance reminds you that the password is required to decrypt and import your `.dizoclip` archive on any machine
 - ✅ **Non-Destructive Import Preview**: Inspect incoming archives before anything is touched. The preview categorizes items into **New** (green), **Matched** (identical, skipped or updated), and **Changed** (conflicts)
 - ✅ **Cross-Machine Portability**: Safely move secrets across different Windows user accounts and PCs without exposing plaintext keys
 - ✅ **Zero Plaintext Leaks**: Legacy unencrypted JSON and plain `.env` file exports are eliminated to guarantee that secrets never sit exposed on disk
@@ -219,11 +222,7 @@ Safely backup or migrate your data across devices with single-format, military-g
 - Never wonder what an import will overwrite thanks to the real-time visual comparison preview
 
 <div align="center">
-  <img src="docs/screenshots/09_export_dialog.png" alt="Selective Export Dialog" width="480" />
-</div>
-
-<div align="center">
-  <img src="docs/screenshots/10_import_dialog.png" alt="Import Preview Dialog" width="480" />
+  <img src="docs/screenshots/08_Export_view.png" alt="Selective Export Dialog" width="360" />
 </div>
 
 ---
@@ -274,26 +273,10 @@ First-time launch includes a clean onboarding tour introducing DizoClip's local-
 ### Selective Export Dialog
 
 <div align="center">
-  <img src="docs/screenshots/09_export_dialog.png" alt="Selective Export Dialog" width="520" />
+  <img src="docs/screenshots/08_Export_view.png" alt="Selective Export Dialog" width="360" />
 </div>
 
-Granular checklist tree allows exporting specific modules or individual items with real-time selection counts and password protection.
-
-### Import Preview & Comparison
-
-<div align="center">
-  <img src="docs/screenshots/10_import_dialog.png" alt="Import Preview & Diff" width="520" />
-</div>
-
-Non-destructive preview compares incoming data against your local store, categorizing entries into New, Matched, and Changed badges before merging.
-
-### Empty-State Guidance & Quick Add
-
-<div align="center">
-  <img src="docs/screenshots/11_empty_state.png" alt="Empty State Quick Action" width="480" />
-</div>
-
-Clean, distraction-free empty state with context-specific descriptions and an auto-sized centered action button.
+Granular checklist tree allows exporting specific modules or individual items with real-time selection counts, automatic empty-module filtering, and single-field password encryption with show/hide reveal toggle.
 
 ### Custom Color Picker & Brand Colors
 

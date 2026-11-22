@@ -7,24 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.0] - 2026-11-21
+## [1.1.0] - 2026-11-22
 
 ### Added
-- **Selective Export & Import Preview**: Choose categories or single items to share via an interactive checklist dialog, protected by a passphrase in encrypted `.dizoclip` format.
+- **Selective Export & Import Preview**: Choose categories or single items to share via an interactive checklist dialog, protected by password encryption in `.dizoclip` format.
+- **Embedded Eye Reveal Toggle (`👁️`)**: Single password input in Export dialog with an interactive reveal toggle to show or hide the password on demand, eliminating double-typing and entry errors.
+- **Dynamic Empty Module Filtering**: Export tree automatically filters out empty modules (sections with 0 items), keeping the checklist concise and actionable.
+- **Structured Password Guidelines & Compact Dialog**: Refined Export dialog height to a sleek 405px with compact item row heights and clear 2-point guidelines (`• This password encrypts your file. • You’ll need it to unlock and import in DizoClip.`).
 - **Import Preview**: Displays New / Matched / Changed items before importing; only New items are selected by default, and Changed items can be imported as non-destructive `(imported)` copies.
-- **Passphrase-Protected Export & Import**: Secure `.dizoclip` export bundle using Scrypt and Fernet (AES-128) with automatic wrong-passphrase retry.
-- **Clipboard Auto-Clear**: Automatically wipes copied API keys after 30 seconds if still on the clipboard. Marks clipboard mime data to request exclusion from Windows Clipboard History (`Win+V`) and cloud syncing.
+- **Password-Protected Export & Import**: Secure `.dizoclip` export bundle using Scrypt and Fernet (AES-128) with automatic wrong-password retry.
+- **Clipboard Auto-Clear**: Automatically wipes copied API keys after 30 seconds if still on the clipboard. Marks clipboard mime data to request exclusion from Windows Clipboard History (`Win+V`) and cloud syncing (default: OFF for user choice).
 - **Encrypt All Data Setting**: Protect prompts, terminal commands, and AI model snippets on disk using DPAPI encryption (`dzc1:` prefix). Default enabled in Settings.
 - **File Logging**: Standardized rotating diagnostic logs in `User_Data/Logs/dizoclip.log` with automatic secret redaction.
 - **Single-Instance Protection**: Enforced using `QLockFile` so concurrent app instances cannot corrupt data files.
 
 ### Fixed
+- **Disabled Button Contrast**: Added explicit disabled icon pixmaps for Export and Import primary buttons so the action icon remains clearly visible and matches the dimmed `#7a6a62` label.
 - Importing an old export after editing an item no longer creates duplicates.
 - Importing damaged data can no longer break the AI Models tab; search and cards tolerate damaged data.
 - A failed save during import no longer leaves unsaved items on screen.
 - Export reports locked items it skipped; export files are written atomically.
 
 ### Changed
+- Standardized terminology across the application from "passphrase" to "password".
 - Surface save failures: disk write errors are shown in a prompt dialog rather than failing silently.
 - Refactored `ListView.rebuild()` to be registry-driven and modular.
 - Unified copy and delete handling across the main window.
