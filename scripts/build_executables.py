@@ -33,11 +33,12 @@ def find_iscc() -> Path | None:
 
     # Standard Windows install locations
     candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 7" / "ISCC.exe",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
-        Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
-        Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
         Path("C:/Program Files/Inno Setup 7/ISCC.exe"),
         Path("C:/Program Files (x86)/Inno Setup 7/ISCC.exe"),
+        Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
+        Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
     ]
     for c in candidates:
         if c.is_file():
