@@ -17,7 +17,6 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QCursor
 from PySide6.QtWidgets import (
     QFrame,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QWidget,
@@ -45,15 +44,8 @@ class CustomTooltipPopup(QFrame):
             }
         """)
 
-        # Drop shadow: modern soft elevation
-        shadow = QGraphicsDropShadowEffect(self.card)
-        shadow.setBlurRadius(14)
-        shadow.setColor(QColor(0, 0, 0, 70))
-        shadow.setOffset(0, 3)
-        self.card.setGraphicsEffect(shadow)
-
         root = QHBoxLayout(self)
-        root.setContentsMargins(4, 4, 4, 4)
+        root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(self.card)
 
         card_lay = QHBoxLayout(self.card)
