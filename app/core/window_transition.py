@@ -1,103 +1,19 @@
 """
-Window transition effects for smooth show/hide animations.
-Provides native Windows-like fade and slide animations.
+Window show/hide helpers.
+
+Launch feel: the window is prepared (DWM dark title bar, rounded corners, WS_POPUP cleared) BEFORE
+the first show(), then shown immediately. Windows 11 plays its own native open animation for a
+standard overlapped window, so no Qt-side fade is needed (and none is the default).
+
+Why no QGraphicsOpacityEffect on the top-level window:
+  an effect forces the whole window to be painted into an off-screen pixmap and keeps it on that
+  slower path for as long as it stays attached. The old code never detached it after the fade, so
+  every repaint went through it for the whole life of the app. A fade, if wanted, uses
+  windowOpacity instead (native layered window, no off-screen copy) and is removed when done.
 """
+from __future__ import annotations
 
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve, Qt, QTimer, QSize
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QWidget, QGraphicsOpacityEffect
-
-
-class WindowTransitionManager:
-    """Manages window show/hide animations with fade and slide effects."""
-    
-    def __init__(self, window):
-        self.window = window
-        self.is_animating = False
-        self.opacity_effect = None
-        self.show_animation = None
-        self.close_animation = None
-    
-    def setup_opacity_effect(self):
-        """Setup opacity effect for fade animations."""
-        if self.opacity_effect is None:
-            self.opacity_effect = QGraphicsOpacityEffect()
-            self.opacity_effect.setOpacity(0.0)
-            self.window.setGraphicsEffect(self.opacity_effect)
-    
-    def animate_show(self, duration: int = 200, on_finished=None):
-        """
-        Show window with fade-in animation.
-        
-        Args:
-            duration: Animation duration in milliseconds (default 200ms)
-            on_finished: Callback when animation completes
-        """
-        if self.is_animating:
-            return
-        
-        self.is_animating = True
-        self.setup_opacity_effect()
-        
-        # Make sure window is visible before animating
-        self.window.show()
-        self.window.raise_()
-        self.window.activateWindow()
-        
-        # Create fade-in animation
-        self.show_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.show_animation.setDuration(duration)
-        self.show_animation.setStartValue(0.0)
-        self.show_animation.setEndValue(1.0)
-        self.show_animation.setEasingCurve(QEasingCurve.InOutQuad)
-        
-        def on_animation_finished():
-            self.is_animating = False
-            self.opacity_effect.setOpacity(1.0)
-            if on_finished:
-                on_finished()
-        
-        self.show_animation.finished.connect(on_animation_finished)
-        self.show_animation.start()
-    
-    def animate_close(self, duration: int = 200, on_finished=None):
-        """
-        Close window with fade-out animation.
-        
-        Args:
-            duration: Animation duration in milliseconds (default 200ms)
-            on_finished: Callback when animation completes
-        """
-        if self.is_animating:
-            return
-        
-        self.is_animating = True
-        self.setup_opacity_effect()
-        
-        # Create fade-out animation
-        self.close_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.close_animation.setDuration(duration)
-        self.close_animation.setStartValue(1.0)
-        self.close_animation.setEndValue(0.0)
-        self.close_animation.setEasingCurve(QEasingCurve.InOutQuad)
-        
-        def on_animation_finished():
-            self.is_animating = False
-            self.window.hide()
-            if on_finished:
-                on_finished()
-        
-        self.close_animation.finished.connect(on_animation_finished)
-        self.close_animation.start()
-    
-    def show_instant(self):
-        """Show window instantly without animation."""
-        self.setup_opacity_effect()
-        self.opacity_effect.setOpacity(1.0)
-        self.window.show()
-        self.window.raise_()
-        self.window.activateWindow()
-        self.is_animating = False
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
 
 
 def prepare_window_for_native_transition(
@@ -116,60 +32,51 @@ def prepare_window_for_native_transition(
     return True
 
 
-def show_prepared_window(window, duration: int = 200):
+def _activate(window) -> None:
+    window.show()
+    window.raise_()
+    window.activateWindow()
+
+
+def show_prepared_window(window, duration: int = 0, on_finished=None) -> None:
     """
-    Show a prepared window with fade-in animation.
-    
-    This should be called after the window is fully prepared but before exec().
-    
-    Args:
-        window: The main window widget
-        duration: Animation duration in milliseconds (default 200ms)
+    Show the prepared window right now. duration=0 (default) lets Windows/DWM do the transition.
+    duration>0 adds a cheap windowOpacity fade (no graphics effect, nothing left attached).
     """
-    # Ensure window is initially hidden and fully rendered
-    if not hasattr(window, '_transition_manager'):
-        window._transition_manager = WindowTransitionManager(window)
-    
-    # Defer animation to next event loop to ensure rendering is complete
-    QTimer.singleShot(50, lambda: window._transition_manager.animate_show(duration=duration))
+    if duration <= 0:
+        _activate(window)
+        if on_finished:
+            on_finished()
+        return
+
+    window.setWindowOpacity(0.0)
+    _activate(window)
+    anim = QPropertyAnimation(window, b"windowOpacity", window)
+    anim.setDuration(duration)
+    anim.setStartValue(0.0)
+    anim.setEndValue(1.0)
+    anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def _done():
+        window.setWindowOpacity(1.0)
+        if on_finished:
+            on_finished()
+
+    anim.finished.connect(_done)
+    anim.start(QPropertyAnimation.DeleteWhenStopped)
 
 
-def show_window_with_animation(window, duration: int = 200, on_finished=None):
-    """
-    Show window with fade-in animation.
-    
-    Args:
-        window: The window to show
-        duration: Animation duration in milliseconds (default 200ms)
-        on_finished: Callback when animation completes
-    """
-    if not hasattr(window, '_transition_manager'):
-        window._transition_manager = WindowTransitionManager(window)
-    
-    QTimer.singleShot(0, lambda: window._transition_manager.animate_show(duration=duration, on_finished=on_finished))
+def hide_window_with_animation(window, duration: int = 0, on_finished=None) -> None:
+    """Hide the window; DWM plays the native close transition. Calls on_finished right after."""
+    window.hide()
+    if on_finished:
+        on_finished()
 
 
-def hide_window_with_animation(window, duration: int = 200, on_finished=None):
-    """
-    Hide window with fade-out animation.
-    
-    Args:
-        window: The window to hide
-        duration: Animation duration in milliseconds (default 200ms)
-        on_finished: Callback when animation completes
-    """
-    if not hasattr(window, '_transition_manager'):
-        window._transition_manager = WindowTransitionManager(window)
-    
-    window._transition_manager.animate_close(duration=duration, on_finished=on_finished)
+# Names kept so existing imports keep working.
+def show_window_with_animation(window, duration: int = 0, on_finished=None) -> None:
+    show_prepared_window(window, duration=duration, on_finished=on_finished)
 
 
-# Alternative function name for compatibility
-def animate_window_show(window, duration: int = 200, on_finished=None):
-    """Alias for show_window_with_animation."""
-    show_window_with_animation(window, duration=duration, on_finished=on_finished)
-
-
-def animate_window_hide(window, duration: int = 200, on_finished=None):
-    """Alias for hide_window_with_animation."""
-    hide_window_with_animation(window, duration=duration, on_finished=on_finished)
+animate_window_show = show_window_with_animation
+animate_window_hide = hide_window_with_animation

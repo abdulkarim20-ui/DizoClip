@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PySide6.QtCore import QLockFile
+from PySide6.QtCore import QLockFile, QTimer
 from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -10,6 +10,7 @@ from app.config.theme import ACCENT, APP_QSS, BG_CARD, BG_INPUT, BG_MAIN, TEXT_D
 from app.core.data_manager import DataManager
 from app.core.fonts import load_app_fonts
 from app.core.logging_setup import setup_logging
+from app.core.memory_trim import freeze_startup_objects, trim_working_set
 from app.core.recovery import load_with_recovery
 from app.core.runtime import user_data_dir
 from app.core.window_transition import show_prepared_window
@@ -69,11 +70,16 @@ def main():
         sys.exit(1)
     win = MainWindow(data_manager=dm, datasets=datasets)
 
-    # Show prepared window with smooth 200ms fade-in
-    show_prepared_window(win, duration=200)
+    # Show right away: the window was prepared (DWM title bar etc.) in MainWindow.__init__, so
+    # Windows plays its own native open transition. No 50ms timer, no Qt fade on top of it.
+    show_prepared_window(win)
+
+    # Once the first frame is up: let GC skip startup objects and give idle pages back to Windows.
+    QTimer.singleShot(1500, lambda: (freeze_startup_objects(), trim_working_set()))
 
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     main()
+

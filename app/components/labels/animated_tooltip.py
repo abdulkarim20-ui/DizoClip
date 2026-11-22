@@ -117,6 +117,31 @@ class CustomTooltipPopup(QFrame):
             pass
 
 
+_SHARED_POPUP: Optional[CustomTooltipPopup] = None
+
+
+def _acquire_popup(text: str, owner, window) -> CustomTooltipPopup:
+    """
+    One tooltip window for the whole app, reused by every widget.
+
+    Before: every widget that was ever hovered kept its own native ToolTip window (+ drop-shadow
+    effect + stylesheet) alive, parented to the main window, so they piled up and survived the
+    cards that created them (cards are rebuilt on every list refresh).
+    """
+    global _SHARED_POPUP
+    popup = _SHARED_POPUP
+    if popup is not None:
+        try:
+            popup.setText(text)
+        except RuntimeError:          # its parent window was deleted
+            popup = None
+    if popup is None:
+        popup = CustomTooltipPopup(text, parent=window)
+        _SHARED_POPUP = popup
+    popup._owner = owner
+    return popup
+
+
 class TooltipFilter(QObject):
     """Event filter that manages animated tooltip display for a target widget."""
     def __init__(self, target_widget: QWidget, text: str, placement: str = "auto"):
@@ -142,10 +167,11 @@ class TooltipFilter(QObject):
     def setText(self, text: str) -> None:
         """Dynamically update tooltip text."""
         self.text = text
-        if self._tooltip_popup is not None:
+        popup = self._tooltip_popup
+        if popup is not None:
             try:
-                if self._tooltip_popup.isVisible():
-                    self._tooltip_popup.setText(text)
+                if popup.isVisible() and getattr(popup, "_owner", None) is self:
+                    popup.setText(text)
             except RuntimeError:
                 self._tooltip_popup = None
 
@@ -158,7 +184,8 @@ class TooltipFilter(QObject):
 
         if popup is not None:
             try:
-                popup.hide()
+                if getattr(popup, "_owner", None) is self:
+                    popup.hide()
             except RuntimeError:
                 # Underlying Qt object has already been deleted.
                 pass
@@ -188,17 +215,12 @@ class TooltipFilter(QObject):
         except RuntimeError:
             return
 
-        if self._tooltip_popup is None:
+        try:
             win = self.target.window() if self.target is not None else None
-            self._tooltip_popup = CustomTooltipPopup(self.text, parent=win)
-            self._tooltip_popup.destroyed.connect(self._on_popup_destroyed)
-        else:
-            try:
-                self._tooltip_popup.setText(self.text)
-            except RuntimeError:
-                win = self.target.window() if self.target is not None else None
-                self._tooltip_popup = CustomTooltipPopup(self.text, parent=win)
-                self._tooltip_popup.destroyed.connect(self._on_popup_destroyed)
+            self._tooltip_popup = _acquire_popup(self.text, self, win)
+        except RuntimeError:
+            self._tooltip_popup = None
+            return
 
         try:
             self._tooltip_popup.adjustSize()
@@ -239,10 +261,11 @@ class TooltipFilter(QObject):
             self._tooltip_popup = None
 
     def _do_hide(self) -> None:
-        if self._tooltip_popup is not None:
+        popup = self._tooltip_popup
+        if popup is not None:
             try:
-                if self._tooltip_popup.isVisible():
-                    self._tooltip_popup.hide_animated()
+                if popup.isVisible() and getattr(popup, "_owner", None) is self:
+                    popup.hide_animated()
             except RuntimeError:
                 self._tooltip_popup = None
 
@@ -273,4 +296,5 @@ def set_tooltip(widget: QWidget, text: str, placement: str = "auto") -> Optional
         QWidget.setToolTip(widget, "")
         return None
     return attach_tooltip(widget, text, placement)
+
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QEvent,
     QPropertyAnimation,
     QSize,
     Qt,
@@ -44,6 +45,7 @@ from app.core.export_import import (
 from app.core.icons import IconManager
 from app.core.data_manager import DataError, DataManager
 from app.core.masking import looks_masked
+from app.core.memory_trim import trim_working_set
 from app.core.window_utils import apply_dark_title_bar, toggle_always_on_top
 from app.core.window_transition import prepare_window_for_native_transition
 from app.sections.ai_models.form import AIModelFormView
@@ -125,23 +127,19 @@ class MainWindow(QMainWindow):
         self.stack.setPalette(stack_pal)
         self.stack.setStyleSheet(f"QStackedWidget {{ background-color: {BG_MAIN}; }}")
 
-        self.list_view = ListView(self)
-        self.form_view = FormView(self)
-        self.prompt_form_view = PromptFormView(self)
-        self.ai_model_form_view = AIModelFormView(self)
-        self.link_form_view = LinkFormView(self)
-        self.command_form_view = CommandFormView(self)
-        self.settings_view = SettingsView(self)
-        self.welcome_view = WelcomeView(self)
+        # Only the list view exists at start-up. Forms, Settings and Welcome are built the first
+        # time they are opened (see the properties below): less to construct before the first
+        # frame, and widgets that are never opened never cost any memory.
+        self._form_view = None
+        self._prompt_form_view = None
+        self._ai_model_form_view = None
+        self._link_form_view = None
+        self._command_form_view = None
+        self._settings_view = None
+        self._welcome_view = None
 
+        self.list_view = ListView(self)
         self.stack.addWidget(self.list_view)
-        self.stack.addWidget(self.form_view)
-        self.stack.addWidget(self.prompt_form_view)
-        self.stack.addWidget(self.ai_model_form_view)
-        self.stack.addWidget(self.link_form_view)
-        self.stack.addWidget(self.command_form_view)
-        self.stack.addWidget(self.settings_view)
-        self.stack.addWidget(self.welcome_view)
         self.setCentralWidget(self.stack)
 
         self._setup_titlebar_color()
@@ -161,6 +159,43 @@ class MainWindow(QMainWindow):
             self.show_list_view(animate=False)
 
         QShortcut(QKeySequence("Escape"), self, activated=self._on_escape)
+
+    # ------------------------------------------------------------ lazy views
+    def _lazy_view(self, attr: str, factory):
+        view = getattr(self, attr)
+        if view is None:
+            view = factory(self)
+            setattr(self, attr, view)
+            self.stack.addWidget(view)
+        return view
+
+    @property
+    def form_view(self):
+        return self._lazy_view("_form_view", FormView)
+
+    @property
+    def prompt_form_view(self):
+        return self._lazy_view("_prompt_form_view", PromptFormView)
+
+    @property
+    def ai_model_form_view(self):
+        return self._lazy_view("_ai_model_form_view", AIModelFormView)
+
+    @property
+    def link_form_view(self):
+        return self._lazy_view("_link_form_view", LinkFormView)
+
+    @property
+    def command_form_view(self):
+        return self._lazy_view("_command_form_view", CommandFormView)
+
+    @property
+    def settings_view(self):
+        return self._lazy_view("_settings_view", SettingsView)
+
+    @property
+    def welcome_view(self):
+        return self._lazy_view("_welcome_view", WelcomeView)
 
     def _setup_titlebar_color(self):
         """
@@ -191,8 +226,13 @@ class MainWindow(QMainWindow):
         """
         super().showEvent(event)
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowStateChange and self.isMinimized():
+            QTimer.singleShot(1000, lambda: trim_working_set() if self.isMinimized() else None)
+
     def closeEvent(self, event: QCloseEvent):
-        """Fade out, then quit. Refuses to lose settings silently."""
+        """Save, hide, quit. Refuses to lose settings silently."""
         event.ignore()  # we close ourselves after the animation
 
         self.clipboard_guard.flush()  # never leave a copied key behind
@@ -208,12 +248,10 @@ class MainWindow(QMainWindow):
             if reply != QMessageBox.Yes:
                 return
 
-        def on_close_finished():
-            from PySide6.QtWidgets import QApplication
-            QApplication.quit()
-
-        from app.core.window_transition import hide_window_with_animation
-        hide_window_with_animation(self, duration=200, on_finished=on_close_finished)
+        # Hide first (Windows plays its native close transition), then quit straight away.
+        from PySide6.QtWidgets import QApplication
+        self.hide()
+        QApplication.quit()
 
     def animate_to_height(self, target_h):
         current_size = self.size()
@@ -380,12 +418,9 @@ class MainWindow(QMainWindow):
             self.list_view.close_search()
             return
 
-        # 2. Return to list view from form views
-        if self.stack.currentWidget() in (
-            self.form_view, self.prompt_form_view, self.ai_model_form_view,
-            self.link_form_view, self.command_form_view,
-            self.settings_view
-        ):
+        # 2. Return to list view from form views / settings (anything except list + welcome)
+        current = self.stack.currentWidget()
+        if current is not self.list_view and current is not self._welcome_view:
             self.show_list_view()
 
     def reload_data(self) -> bool:
@@ -403,7 +438,8 @@ class MainWindow(QMainWindow):
         self.commands = datasets["commands"]
         self.custom_colors = datasets["custom_colors"]
         self.list_view.refresh_nav_tabs()
-        self.settings_view.refresh_nav_tabs()
+        if self._settings_view is not None:
+            self._settings_view.refresh_nav_tabs()
         self.show_list_view()
         return True
 
@@ -612,3 +648,4 @@ class MainWindow(QMainWindow):
 
     def apply_always_on_top(self, enable: bool):
         toggle_always_on_top(self, enable)
+

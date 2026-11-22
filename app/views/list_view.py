@@ -328,8 +328,9 @@ class ListView(QWidget):
     def _on_tab_drag_released(self, btn):
         """Persists tab order to DC_Settings.json on drag release."""
         self.win.save_settings()
-        if hasattr(self.win, "settings_view") and self.win.settings_view:
-            self.win.settings_view.refresh_nav_tabs()
+        sv = getattr(self.win, "_settings_view", None)  # don't build Settings just to refresh it
+        if sv is not None:
+            sv.refresh_nav_tabs()
 
     def _on_tab_button_clicked(self, tab_id: str):
         self.select_tab(tab_id)
@@ -657,3 +658,4 @@ class ListView(QWidget):
             self.expanded_card.set_expanded(False)
         card.set_expanded(True)
         self.expanded_card = card
+
