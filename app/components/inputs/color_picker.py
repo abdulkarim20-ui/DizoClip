@@ -51,7 +51,7 @@ class SaturationValueCanvas(QWidget):
         self._hue = hue
         self._sat = sat
         self._val = val
-        self.setFixedSize(228, 126)
+        self.setFixedSize(240, 130)
         self.setCursor(Qt.CrossCursor)
 
     def set_hsv(self, hue: float, sat: float, val: float):
@@ -340,9 +340,10 @@ class ColorPickerPopup(QFrame):
             col.setContentsMargins(0, 0, 0, 0)
             col.setSpacing(3)
             inp = QLineEdit()
-            inp.setFixedSize(44, 26)
+            inp.setFixedSize(48, 26)
             inp.setAlignment(Qt.AlignCenter)
             inp.setMaxLength(3)
+            inp.setTextMargins(0, 0, 0, 0)
             inp.setStyleSheet("""
                 QLineEdit {
                     background-color: #12141c;
@@ -351,6 +352,7 @@ class ColorPickerPopup(QFrame):
                     color: #ffffff;
                     font-size: 11.5px;
                     font-weight: 600;
+                    padding: 0px 2px;
                 }
                 QLineEdit:focus {
                     border-color: #ff8c5a;
@@ -380,17 +382,19 @@ class ColorPickerPopup(QFrame):
         col_hex.setContentsMargins(0, 0, 0, 0)
         col_hex.setSpacing(3)
         self.hex_input = QLineEdit()
-        self.hex_input.setFixedSize(68, 26)
+        self.hex_input.setFixedSize(78, 26)
         self.hex_input.setAlignment(Qt.AlignCenter)
         self.hex_input.setMaxLength(7)
+        self.hex_input.setTextMargins(0, 0, 0, 0)
         self.hex_input.setStyleSheet("""
             QLineEdit {
                 background-color: #12141c;
                 border: 1px solid #282f40;
                 border-radius: 5px;
                 color: #ffffff;
-                font-size: 11px;
+                font-size: 11.5px;
                 font-weight: 600;
+                padding: 0px 2px;
             }
             QLineEdit:focus {
                 border-color: #ff8c5a;
@@ -492,6 +496,10 @@ class ColorPickerPopup(QFrame):
         self.g_input.setText(str(self.current_color.green()))
         self.b_input.setText(str(self.current_color.blue()))
         self.hex_input.setText(self.current_color.name())
+        self.r_input.setCursorPosition(0)
+        self.g_input.setCursorPosition(0)
+        self.b_input.setCursorPosition(0)
+        self.hex_input.setCursorPosition(0)
         self._syncing_inputs = False
 
     def _on_rgb_text_changed(self):
